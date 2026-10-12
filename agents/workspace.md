@@ -127,7 +127,20 @@ ls -A tmp
 
 ```bash
 cd app && composer serve               # http://localhost:8000
-docker compose -f app up -d --build    # http://localhost:8080, PostgreSQL
+docker compose -f app up -d            # http://localhost:8080 — nginx + php-fpm, no build
+```
+
+`-f` takes the **file**, not the directory, so `docker compose -f app up -d` fails
+with "is a directory". Either spell the file or `cd app` first.
+
+The app stack builds nothing. Both server images are stock and the workspace is
+bind-mounted, so an edit in any package's `src/` is live in the container — which
+also means a library change needs no rebuild and no override file.
+
+Worker mode is optional and lives in its own package with its own image:
+
+```bash
+docker compose -f frankenphp/docker/compose.yml up -d --build
 ```
 
 Dependencies resolve from GitHub, so a lone clone works:

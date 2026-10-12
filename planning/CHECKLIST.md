@@ -5,7 +5,7 @@
 > a bug.
 
 Framework: `iam-adty/empira-principle` · app: `iam-adty/empira-app`
-Current: **473 framework tests / 1071 assertions**, **37 auth tests / 71 assertions**, **15 app tests / 26 assertions**.
+Current: **473 framework tests / 1071 assertions**, **37 auth tests / 71 assertions**, **6 frankenphp tests / 11 assertions**, **16 app tests / 29 assertions**.
 
 ---
 
@@ -195,13 +195,69 @@ header at all**, so a wildcard resolves to HTML. Verified against
   published package carries `src/`, `docs/`, `bin/` and the markdown docs. The
   skills point at this repository's own `tests/` paths, which do not exist in a
   consumer's `vendor/`; contributors get them from the git checkout~~
-- ~~Push both repositories to a remote~~ — **not doing it.** Local git only, by
-  decision. Nothing has ever been pushed, no tag exists, and the suite is the
-  gate because there is nowhere for it to run otherwise. Revisit only if the
-  package is actually published to Packagist; the published tarball's shape is
-  already fixed above, and a first release would need that constraint changing.
+- ~~Push both repositories to a remote~~ — **done, and this line was wrong for
+  weeks.** All five repositories are public on GitHub under `iam-adty`, pushed to
+  `main`. `dev` became a repository of its own rather than living inside another
+  package, which is what lets one set of agent guidance cover all five without
+  being copied between them.
 
-### 5. Deferred, by decision
+### 5. Classic runtime and worker mode — shipped 2026-10-12, **one item unfinished**
+
+The reference application no longer builds an image. It runs on stock
+`nginx:alpine` and `php:8.4-fpm-alpine` with the workspace bind-mounted, so an
+edit in a library's `src/` is live in the running container. Three stock services,
+no `Dockerfile`, no rebuild. Verified: `GET /` → 200, unknown route → 404,
+`.env` → 403, both auth migrations applied to an empty PostgreSQL, and **5/5 cold
+starts from wiped volumes**.
+
+Worker mode moved out of `public/index.php` into `iam-adty/empira-frankenphp`, an
+optional module holding the loop and a base image. `public/index.php` is
+classic-only and has no `APP_RUNTIME` branch. The module list moved to
+`bootstrap/modules.php`, and `dev/tools/module-contract` checks every package is
+shaped like its role.
+
+Three things were measured rather than assumed, and are written down in the
+compose file and the nginx config because each was found the hard way:
+
+- **`pdo_pgsql` needs `-d` on the `php-fpm` binary, not a pool setting.** The
+  extension loads when the SAPI starts, so `php_admin_value[extension]` is too
+  late and silently ignored. The CLI is a separate SAPI and needs the flag too —
+  without it the driver is present for every request and absent for the migration,
+  which surfaces as a connection error mentioning nothing about extensions.
+- **Compose interpolates `$var` in a `command:` block before the shell sees it.**
+  Escape it as `$$var`. The symptom is a missing-dynamic-library error for a path
+  that is right in the file.
+- **nginx must not resolve `php` at startup.** It resolves a literal upstream while
+  parsing config, and Docker registers a service's DNS alias after the dependent
+  container starts — so the first `up` died with `host not found in upstream "php"`
+  and the second worked. `depends_on` narrows the window and does not close it. A
+  `resolver` plus a variable in `fastcgi_pass` moves the lookup to request time.
+
+**Unfinished — carries into the next plan:**
+
+- ~~**Never booted the worker image once.**~~ **NOT DONE.** The loop was moved out
+  of `public/index.php` and the module's refusal under a non-FrankenPHP PHP is
+  tested, but `frankenphp/Dockerfile` has never been built or run. It takes the
+  **workspace root** as context and installs `principle` and `auth` as Composer
+  path packages, and nothing has exercised that. This is the largest untested
+  surface left by the change: a real package with an unbuilt image.
+- ~~**`empira-frankenphp` has no remote.**~~ **NOT DONE.** The GitHub repository
+  does not exist and no `gh` CLI is available to create it. The package is
+  committed locally on `main` at `efe4c68` with two commits and is **not pushed**.
+  The other four repositories are pushed and in sync.
+- ~~**`dev/agents/app.md` and `dev/agents/workspace.md` still describe FrankenPHP
+  as the application's runtime.**~~ **DONE.** Four stale lines in `app.md` (the
+  layout still listed `Dockerfile` and `docker/entrypoint.sh`, and the gotchas
+  still described an `APP_RUNTIME` branch in `public/index.php`) and one in
+  `workspace.md` (the old `--build` command). Corrected during the push rather
+  than left for the next plan: shipping a doc that points at deleted files is
+  actively misleading, and the checklist would otherwise have recorded a known
+  defect as merely unexamined.
+- ~~**Runtime parity was checked for the classic path only.~~** `nginx + php-fpm`
+  and the built-in server were compared and agree (`/` → 200, unknown → 404). The
+  worker was never compared against either, because it has never run.
+
+### 6. Deferred, by decision
 - ~~`Format::Auto` override on `#[Route]`~~ — **not adding it.** htmx's
   `overrideMimeType` means htmx traffic is permanently HTML, so a route-level
   force would be a rule with no correct use. `onException()` covers apps that

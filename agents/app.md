@@ -24,12 +24,12 @@ app/
 ├── composer.json      requires empira-principle and empira-auth, both from GitHub
 ├── composer.lock      committed: an application pins its build
 ├── phpunit.xml
-├── Dockerfile         FrankenPHP, worker mode
-├── docker/entrypoint.sh  migrates, then starts FrankenPHP
-├── docker-compose.yml FrankenPHP + PostgreSQL
+├── docker-compose.yml nginx + php-fpm + PostgreSQL, no image build
+├── docker/nginx.conf  bind-mounted into stock nginx
 ├── migrations/        empty, on purpose — see the .gitkeep
 ├── bootstrap/app.php  what `bin/empira` boots
-├── public/index.php   front controller *and* worker script
+├── bootstrap/modules.php  what this application is made of
+├── public/index.php   front controller, classic runtimes only
 ├── src/
 │   ├── App.php        all the wiring, in one readable method
 │   ├── Layouts/       SiteLayout — the document and its regions
@@ -216,16 +216,19 @@ failing with a bare `COPY failed`.
   returns.** Returning a plain `$this->hx->div()` renders a div with no id, so
   `hx-target` finds nothing and an htmx swap silently targets nothing. The id is
   `region-<name>`, so target `region-main`, not `main`.
-- **`App::boot()` runs per worker thread.** It does not migrate and does not seed,
-  and that is deliberate: a boot that migrates has every thread racing through the
-  same migration. Do not move either back into boot.
+- **`App::boot()` runs per php-fpm worker.** It does not migrate and does not seed,
+  and that is deliberate: a boot that migrates has every worker racing through the
+  same migration. The `php` service migrates once, before php-fpm starts.
+  Do not move either back into boot.
 - **The `SessionGuard` must be built from `$app->session()`** — the application's
   own session, the one everything else writes to. A guard holding a session of
   its own reads a store nobody writes, and every sign-in fails as "wrong
   password". It looks correct in review because the type is right.
-- **`respond()` in the worker loop, `send()` in classic mode.** `send()` exits,
-  which takes the worker down and earns you one request per process.
-  `public/index.php` branches on `APP_RUNTIME` for that reason.
+- **`send()` in the front controller, `respond()` in a worker.** `send()` exits,
+  which takes a worker down and earns you one request per process. This
+  application calls `send()` and has no branch: worker mode is a package
+  (`empira-frankenphp`) whose `worker.php` calls `respond()` in a loop. If you add
+  a loop here, you have re-added a runtime the application does not use.
 
 ## `APP_SECRET`
 
