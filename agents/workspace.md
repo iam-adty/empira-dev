@@ -1,15 +1,17 @@
 # AGENTS.md
 
-> **This file is [`dev/agents/workspace.md`](workspace.md).** The path at the
-> workspace root is a symlink to it, and it is the symlink that OpenCode finds —
-> see the note on discovery below before moving anything that lives in `dev/`.
+> **This file is [`dev/agents/workspace.md`](workspace.md).** The workspace root has
+> its own `AGENTS.md`, holding the workspace rules; this one is the copy that
+> used to be *the* file. Where the two differ, update the root one first — it is
+> the one a session reads without being asked.
 
 ## What this directory is
 
 A workspace holding **three independent Composer packages**. No build depends on
 the others being in this directory — `app/` requires `principle/` and `auth/` the
-way any application requires a framework, except that here they are symlinked
-from this filesystem.
+way any application requires a framework. Each resolves its dependencies from
+GitHub through Composer `vcs` repositories, so any one of them clones and
+installs on its own.
 
 ```
 .
@@ -115,18 +117,21 @@ cd app && composer serve               # http://localhost:8000
 docker compose -f app up -d --build    # http://localhost:8080, PostgreSQL
 ```
 
-`app` links `principle` and `auth` through
-[franzl/studio](https://packagist.org/packages/franzl/studio), so an edit under
-either `src/` is live on reload — no rebuild.
+Dependencies resolve from GitHub, so a lone clone works:
 
 ```bash
-cd app && vendor/bin/studio load ../principle
-cd app && vendor/bin/studio load ../auth
-cd app && composer update iam-adty/empira-principle iam-adty/empira-auth
+cd app && composer install
 ```
 
-Each package requires `dev-main`, so it tracks the **branch**, not a release.
-Once the libraries are tagged, those constraints should change.
+Two bind mounts in `app/docker-compose.yml` still point at `../principle/src` and
+`../auth/src`, which makes a sibling edit live for the running container without
+a rebuild. Nothing else in the workspace depends on the directories being beside
+each other — except the image build, which needs all three.
+
+Each package requires `dev-main`, so it tracks the **branch**, not a release. A
+change to `principle/main` can therefore break `app`'s install. `app` is the one
+package that commits its `composer.lock`, so its own build is pinned; the two
+libraries are not. Tag them when a change should not land on everyone at once.
 
 **A dependency that is not mounted is a dependency whose edits do not take.**
 `app/docker-compose.yml` bind-mounts `principle/src` *and* `auth/src`; the

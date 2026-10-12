@@ -21,9 +21,9 @@ There is no `seed` command. See [Account switching](#there-is-no-seed) below.
 
 ```
 app/
-├── composer.json      requires empira-principle and empira-auth, both path-linked
+├── composer.json      requires empira-principle and empira-auth, both from GitHub
+├── composer.lock      committed: an application pins its build
 ├── phpunit.xml
-├── studio.json        links ../principle through franzl/studio
 ├── Dockerfile         FrankenPHP, worker mode
 ├── docker/entrypoint.sh  migrates, then starts FrankenPHP
 ├── docker-compose.yml FrankenPHP + PostgreSQL
@@ -154,22 +154,32 @@ migration, the entity directory is discoverable, the secret guard guards, and
 asserts `seed` is gone, so a command that should not be here cannot quietly
 return.
 
-## The framework is linked, not installed
+## The libraries are installed, not linked
 
-Both dependencies are Composer path packages, symlinked by `franzl/studio`:
+Both dependencies resolve from GitHub through Composer `vcs` repositories:
 
-```bash
-ls -la vendor/iam-adty/     # empira-auth -> ../../../auth/   empira-principle -> ../../../principle/
+```json
+{ "type": "vcs", "url": "git@github.com:iam-adty/empira-principle.git" }
+{ "type": "vcs", "url": "git@github.com:iam-adty/empira-auth.git" }
 ```
 
-**An edit under `principle/src` or `auth/src` is live immediately** — no rebuild,
-no reinstall. If a change is not visible, check the symlinks first; do not
-reinstall.
+A path repository used to sit here too, so a sibling checkout resolved without
+the network. It was removed because it does not survive a clone — the whole
+point of a public repository is that someone can get this working from nothing
+but the URL. It also took `franzl/studio` with it, since studio exists only to
+maintain symlinks.
 
-Both are mounted into the container. Forgetting the second one costs an hour: the
-image has a copy, the container has a stale one, and the symptom is a change that
-"did not take". A changed `composer.json` in any of the three packages *does* need
-`docker compose down -v && docker compose up -d --build`.
+**Consequence: an edit under `principle/src` is no longer live.** It reaches this
+application through `composer update iam-adty/empira-principle` and a new push,
+or — in this workspace — through the two bind mounts below, which still point at
+the sibling checkouts and do still make an edit live for the running container.
+
+**The Docker image installs from path packages, not from GitHub**, because the
+build context is the workspace root and both sibling directories are in it. That
+is why the image bakes in current source rather than a published release, and why
+the build needs all three repositories side by side. Forgetting the second
+bind-mount costs an hour: the image has a copy, the container has a stale one,
+and the symptom is a change that "did not take".
 
 ## Things that will bite you
 

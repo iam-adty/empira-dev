@@ -9,10 +9,10 @@ dev/
 ├── opencode.json          agent config: instructions + permissions
 ├── .opencode/skills/      add-component, add-route, debug-htmx, verify
 ├── agents/                the four AGENTS.md files
-│   ├── workspace.md       ← ../AGENTS.md        (symlink)
-│   ├── principle.md       ← principle/AGENTS.md
-│   ├── auth.md            ← auth/AGENTS.md
-│   └── app.md             ← app/AGENTS.md
+│   ├── workspace.md       ← was ../AGENTS.md      (now a real file at the root)
+│   ├── principle.md       ← was principle/AGENTS.md
+│   ├── auth.md            ← was auth/AGENTS.md
+│   └── app.md             ← was app/AGENTS.md
 ├── planning/
 │   ├── CHECKLIST.md       ← principle/CHECKLIST.md
 │   └── SPEC.md            ← principle/SPEC.md
@@ -35,45 +35,51 @@ It is its own repository for the same reason the other three are: this workspace
 has no repository at its root, and adding one would tie the packages together in
 a way that makes them harder to publish independently.
 
-## The three symlinks, and why they are not optional
+## Skills need a session started here
 
-```
-../AGENTS.md    -> dev/agents/workspace.md
-../.opencode/   -> dev/.opencode
-../opencode.json -> dev/opencode.json
-```
+There were symlinks at the workspace root — `AGENTS.md`, `.opencode/` and
+`opencode.json` — pointing into this directory. They are gone, deliberately: a
+symlink across repositories is invisible to `git`, breaks on a fresh clone, and
+fails as a dangling pointer rather than an error.
 
-OpenCode discovers instruction files and agent skills by **traversing upward from
-the working directory**, stopping at the nearest git worktree:
+What that costs is specific and worth stating rather than discovering:
+
+OpenCode finds skills by **traversing upward from the working directory**,
+stopping at the nearest git worktree:
 
 > walks up from your current directory until it reaches the git worktree
 
-This directory is *above* all three package repositories, and the workspace root
-is where sessions start. So a file at `dev/agents/workspace.md` is a **sibling**
-of the traversal path, not an ancestor of it — and nothing in `dev/` would ever
-be found. Moving the files here without the symlinks would not consolidate them;
-it would silently disable them, which is the kind of change that produces no
-error and no symptom beyond an agent quietly following worse instructions.
+This directory is a *sibling* of the traversal path, not an ancestor of it. So
+**start a session here** to get the four skills:
 
-The symlinks are what make a real location and a discovered location the same
-file. Every reference below is checked against them.
+```bash
+cd dev && opencode
+```
+
+From the workspace root you get `AGENTS.md` — which is a real file there now,
+holding the workspace rules — and not the skills. From inside `principle/`,
+`auth/` or `app/` you get that package's context and none of the skills either,
+because traversal stops at the package's worktree.
+
+The alternative was leaving the symlinks, which work until someone clones.
 
 ## Consequences worth knowing
 
-- **A session started inside `principle/`, `auth/` or `app/` no longer reads
-  that package's `AGENTS.md`.** Traversal stops at that package's worktree, so
-  `../dev/` is never reached. It gets the workspace instructions instead.
+- **The root `AGENTS.md` is a separate file now, not a pointer.** It holds the
+  workspace rules and nothing else; this file set holds the per-package guidance.
+  They cover the same workspace and neither is wrong, so they *can* drift — the
+  root one is the copy to update first, because it is the one read without
+  asking.
 
-  This is arguably an improvement — one canonical instruction set rather than
-  four that can drift — but it is a behaviour change, not a no-op. The package
-  guidance is one `principle.md` away in `dev/agents/`.
+- **`git checkout` in a package will not restore its `AGENTS.md`.** Those files
+  are gone from the three repositories, and the workspace root is covered by no
+  repository at all. `dev/` is the only history they have.
 
-- **`git checkout` in a package will not restore these.** They are gone from
-  that repository, and the workspace root is not versioned by anything.
-
-- **Editing `dev/agents/workspace.md` edits `AGENTS.md`.** They are the same
-  file, and the workspace root is not covered by any repository's `.gitignore` —
-  so be deliberate about it.
+- **Published documents link here over the network, not by path.** `principle`
+  and `app` both ship markdown that referenced `../dev/…`, which 404s for
+  anyone reading the package on Packagist or cloning one repository. Those links
+  now point at `github.com/iam-adty/empira-dev`, which is why this repository
+  has to be public for them to work at all.
 
 ## Commands
 
