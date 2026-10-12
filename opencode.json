@@ -1,17 +1,23 @@
 {
     "$schema": "https://opencode.ai/config.json",
-    "//instructions": "Relative to THIS file's directory, which is dev/ — not the package the docs belong to. `agents/principle.md` is this project's AGENTS.md, which moved out of principle/; the `docs/` entries stayed in principle/ because they are published reference material, not agent instruction.",
+    "//instructions": "Relative to THIS file's directory, which is dev/ — not the package the docs belong to. The agents/ files are this workspace's AGENTS.md set, all four of them, because a session started in dev/ may work in any package and should not have to know which. The `../principle/` entries are published reference material, not agent instruction, and stay where they ship.",
     "instructions": [
+        "agents/workspace.md",
         "agents/principle.md",
+        "agents/auth.md",
+        "agents/app.md",
         "../principle/CONTRIBUTING.md",
         "../principle/docs/components.md",
         "../principle/docs/routing.md",
         "../principle/docs/views.md",
         "../principle/docs/http.md",
+        "../principle/docs/data.md",
+        "../principle/docs/modules.md",
         "../principle/docs/testing.md",
         "../principle/docs/workers.md",
         "../principle/docs/recipes.md"
     ],
+    "//permission": "The workspace's rule, and the reason it lives here rather than in any package: `sed -i*` is denied and the same is true of a Python or heredoc rewrite, but the last of those cannot be expressed as a path pattern. The written rule is in agents/workspace.md and agents/principle.md; this is the part a machine can enforce. `docker compose *` is allowed because the app image needs a rebuild whenever a library changes, and asking about it every time trains people to approve without reading.",
     "permission": {
         "bash": {
             "*": "ask",

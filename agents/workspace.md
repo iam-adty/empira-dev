@@ -49,11 +49,24 @@ core to feature, is one that cannot be cut.
 Then the reference, which stays in the framework package because it ships to
 consumers: [`principle/docs/`](principle/docs/).
 
-**A session started inside a package reads this file, not that package's.**
-OpenCode traverses *up* from the working directory and stops at the nearest git
-worktree, so `../dev/` is never reached from inside `principle/`. One canonical
-set of instructions, rather than four that can drift — but the package guidance
-is one file away in `dev/agents/`.
+**Where a session starts decides what it loads**, and all four places work:
+
+| Started in | Instructions | Skills |
+|---|---|---|
+| `principle/` | `principle.md` + the framework's docs | all four |
+| `auth/` | `auth.md` + its README | all four |
+| `app/` | `app.md` + its README | all four |
+| `dev/` | all four agent files | all four |
+| the workspace root | `AGENTS.md`, a pointer to this directory | none |
+
+Each package's `opencode.json` is committed and names `../dev/…`, so nothing here
+depends on a symlink or an environment variable. **The root is the one gap, and it
+is deliberate**: there is no root `opencode.json`, because the root is covered by
+no repository, and a third unversioned file drifting from this one would undo what
+moving the material achieved.
+
+So: read the package's own file when you are in a package, and this one for
+anything that spans them.
 
 ## Rules for this workspace
 

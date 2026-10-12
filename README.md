@@ -35,41 +35,67 @@ It is its own repository for the same reason the other three are: this workspace
 has no repository at its root, and adding one would tie the packages together in
 a way that makes them harder to publish independently.
 
-## Skills need a session started here
+## How a session finds what is in here
 
 There were symlinks at the workspace root — `AGENTS.md`, `.opencode/` and
 `opencode.json` — pointing into this directory. They are gone, deliberately: a
 symlink across repositories is invisible to `git`, breaks on a fresh clone, and
 fails as a dangling pointer rather than an error.
 
-What that costs is specific and worth stating rather than discovering:
+Replacing them took two mechanisms, because OpenCode discovers two different
+things by two different rules.
 
-OpenCode finds skills by **traversing upward from the working directory**,
-stopping at the nearest git worktree:
+**Instructions — an `opencode.json` in each package.** That file exists in each
+of the three repositories, is committed, and names this one:
 
-> walks up from your current directory until it reaches the git worktree
-
-This directory is a *sibling* of the traversal path, not an ancestor of it. So
-**start a session here** to get the four skills:
-
-```bash
-cd dev && opencode
+```json
+"instructions": ["../dev/agents/principle.md", "CONTRIBUTING.md", "docs/*.md"]
 ```
 
-From the workspace root you get `AGENTS.md` — which is a real file there now,
-holding the workspace rules — and not the skills. From inside `principle/`,
-`auth/` or `app/` you get that package's context and none of the skills either,
-because traversal stops at the package's worktree.
+**Skills — `skills.paths`**, in the same file:
 
-The alternative was leaving the symlinks, which work until someone clones.
+```json
+"skills": { "paths": ["../dev/.opencode/skills"] }
+```
+
+Skills are the reason for `paths`. OpenCode finds a `.opencode/skills/` directory
+by traversing *upward* from the working directory, stopping at the nearest git
+worktree — and `principle/`, `auth/` and `app/` are all worktrees, so a directory
+in any of them is invisible to a session started there. `dev/` is a sibling of
+all three and therefore not on the traversal path at all. A **path in a config
+file** has no such constraint: it resolves from wherever the session started.
+
+Verified rather than assumed, with the two commands that show the resolved state:
+
+```bash
+cd principle && opencode debug config    # instructions + skills.paths
+cd principle && opencode debug skill     # all four skills, from dev/
+```
+
+| Session started in | Instructions | Skills |
+|---|---|---|
+| `principle/` `auth/` `app/` | that package's agent file + its docs | all four |
+| `dev/` | all four agent files + the framework's docs | all four |
+| the workspace root | this directory's `AGENTS.md`, as a pointer | none |
+
+The last row is deliberate. There is no root `opencode.json`, because the root is
+covered by no repository — a third unversioned file drifting from here would undo
+what moving the material achieved. The root `AGENTS.md` points at this directory
+instead, which is enough to find everything in it.
+
+**A clone of one package on its own has no `../dev/`.** Both paths then resolve to
+nothing, and OpenCode does not complain: zero skills, the package's own
+`CONTRIBUTING.md`, and a working `composer test`. Measured, because a silent
+degradation is only safe if it is known to be one.
 
 ## Consequences worth knowing
 
-- **The root `AGENTS.md` is a separate file now, not a pointer.** It holds the
-  workspace rules and nothing else; this file set holds the per-package guidance.
-  They cover the same workspace and neither is wrong, so they *can* drift — the
-  root one is the copy to update first, because it is the one read without
-  asking.
+- **The root `AGENTS.md` is a pointer, and deliberately small** — 69 lines of
+  layout, commands and a table saying which file to read. It used to be a
+  139-line second copy of `workspace.md`, and the two had already diverged.
+  Anything that belongs to a package lives here instead, so the duplication has
+  nothing left to disagree about. It is still unversioned, which is why it opens
+  by saying the code wins.
 
 - **`git checkout` in a package will not restore its `AGENTS.md`.** Those files
   are gone from the three repositories, and the workspace root is covered by no
