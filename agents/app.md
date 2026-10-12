@@ -169,17 +169,46 @@ point of a public repository is that someone can get this working from nothing
 but the URL. It also took `franzl/studio` with it, since studio exists only to
 maintain symlinks.
 
-**Consequence: an edit under `principle/src` is no longer live.** It reaches this
-application through `composer update iam-adty/empira-principle` and a new push,
-or — in this workspace — through the two bind mounts below, which still point at
-the sibling checkouts and do still make an edit live for the running container.
+**Consequence: an edit under `principle/src` is no longer live by default.** It
+reaches this application through `composer update iam-adty/empira-principle` and
+a new push. That is deliberate — the container runs what `composer.lock` pins, so
+it and the host cannot quietly disagree about which version of a library is
+running.
 
-**The Docker image installs from path packages, not from GitHub**, because the
-build context is the workspace root and both sibling directories are in it. That
-is why the image bakes in current source rather than a published release, and why
-the build needs all three repositories side by side. Forgetting the second
-bind-mount costs an hour: the image has a copy, the container has a stale one,
-and the symptom is a change that "did not take".
+**To develop a library against a running container**, put this in
+`docker-compose.override.yml` (gitignored, loaded automatically):
+
+```yaml
+services:
+  app:
+    volumes:
+      - ../principle:/workspace/app/vendor/iam-adty/empira-principle
+      - ../auth:/workspace/app/vendor/iam-adty/empira-auth
+```
+
+**The lock is what moves the pin, not a rebuild.** After a library change is
+pushed, this application's install still holds the old commit until you run:
+
+```bash
+cd app && composer update iam-adty/empira-principle iam-adty/empira-auth
+```
+
+The Docker build reads the lock, so a library change that has not been `composer
+update`d here is simply not in the image — and the build will not tell you, which
+is correct: an application that picks up a dependency's `main` on its own is not
+reproducible.
+
+**Mount each package whole, not `src/`.** They used to be mounted in the
+committed compose file, source directory only, and that produced a package split
+down the middle: classes from the working copy, `migrations/` from the image. A
+new class arrived instantly while the migration creating its table did not, and
+the failure appeared at query time with nothing to point at a mount. Proved by
+appending a line to a migration and finding the container did not see it.
+
+**The image still installs from path packages**, because the build context is the
+workspace root and both siblings are in it — so the build needs all three
+repositories side by side, and the guard in the Dockerfile says so rather than
+failing with a bare `COPY failed`.
 
 ## Things that will bite you
 
