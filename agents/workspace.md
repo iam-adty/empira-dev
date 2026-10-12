@@ -137,11 +137,10 @@ The app stack builds nothing. Both server images are stock and the workspace is
 bind-mounted, so an edit in any package's `src/` is live in the container — which
 also means a library change needs no rebuild and no override file.
 
-Worker mode is optional and lives in its own package with its own image:
-
-```bash
-docker compose -f frankenphp/docker/compose.yml up -d --build
-```
+Worker mode is optional and lives in its own package. It ships no image — a stock
+PHP cannot become FrankenPHP at runtime, and whether one should be built is an
+application's decision. Nothing in this workspace runs a worker by default, and
+nothing in it has ever done so; see [`frankenphp.md`](frankenphp.md).
 
 Dependencies resolve from GitHub, so a lone clone works:
 

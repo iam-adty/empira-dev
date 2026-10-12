@@ -5,7 +5,7 @@
 > a bug.
 
 Framework: `iam-adty/empira-principle` · app: `iam-adty/empira-app`
-Current: **473 framework tests / 1071 assertions**, **37 auth tests / 71 assertions**, **6 frankenphp tests / 11 assertions**, **16 app tests / 29 assertions**.
+Current: **473 framework tests / 1071 assertions**, **37 auth tests / 71 assertions**, **14 frankenphp tests / 24 assertions**, **16 app tests / 29 assertions**.
 
 ---
 
@@ -233,29 +233,47 @@ compose file and the nginx config because each was found the hard way:
   and the second worked. `depends_on` narrows the window and does not close it. A
   `resolver` plus a variable in `fastcgi_pass` moves the lookup to request time.
 
-**Unfinished — carries into the next plan:**
+**Reading the worker package before pushing it found two bugs.** Both had been
+committed, and both were invisible to a passing suite.
 
-- ~~**Never booted the worker image once.**~~ **NOT DONE.** The loop was moved out
-  of `public/index.php` and the module's refusal under a non-FrankenPHP PHP is
-  tested, but `frankenphp/Dockerfile` has never been built or run. It takes the
-  **workspace root** as context and installs `principle` and `auth` as Composer
-  path packages, and nothing has exercised that. This is the largest untested
-  surface left by the change: a real package with an unbuilt image.
-- ~~**`empira-frankenphp` has no remote.**~~ **NOT DONE.** The GitHub repository
-  does not exist and no `gh` CLI is available to create it. The package is
-  committed locally on `main` at `efe4c68` with two commits and is **not pushed**.
-  The other four repositories are pushed and in sync.
-- ~~**`dev/agents/app.md` and `dev/agents/workspace.md` still describe FrankenPHP
-  as the application's runtime.**~~ **DONE.** Four stale lines in `app.md` (the
-  layout still listed `Dockerfile` and `docker/entrypoint.sh`, and the gotchas
-  still described an `APP_RUNTIME` branch in `public/index.php`) and one in
-  `workspace.md` (the old `--build` command). Corrected during the push rather
-  than left for the next plan: shipping a doc that points at deleted files is
-  actively misleading, and the checklist would otherwise have recorded a known
-  defect as merely unexamined.
-- ~~**Runtime parity was checked for the classic path only.~~** `nginx + php-fpm`
+- **`worker.php` could not start for anyone who installed it.** It resolved its
+  autoloader as `dirname(__DIR__, 2) . '/app/vendor/autoload.php'` — right for a
+  sibling checkout, and `app/vendor/app/vendor/autoload.php` for the only layout
+  anybody ships. The README told people to run exactly that path. Fixed by
+  resolving against the working directory, which is the application root in every
+  documented way of running the worker.
+- **The `Dockerfile` built an application that does not install the package.** Its
+  `CMD` named `/app/vendor/iam-adty/empira-frankenphp/worker.php`, which
+  `composer install` never creates, because `app/` deliberately does not require
+  this module. It also `COPY`-ed its own `composer.json` into a path `COPY app /app`
+  overwrote two lines later.
+
+The second is why "it has never been built" was worth writing down rather than
+waving past: the reason it was never built is that it could not have worked.
+
+**The image and its compose file were removed.** They were scaffolding for a
+premise that turned out false, and an unbuilt image in a published package reads
+as tested. What remains ships and runs: the loop, the entrypoint, the refusal, and
+`bin/frankenphp-worker`. The reasoning that *some* image is unavoidable stays in
+the README, because it is true — FrankenPHP cannot be added to a stock PHP the way
+`pdo_pgsql` can — along with what a new one would have to get right.
+
+**Unfinished, by decision:**
+
+- ~~**No FrankenPHP process has ever served a request from this package.**~~ The
+  loop, the entrypoint's path resolution and the module's refusal are covered by
+  tests; none of it has been executed against a real worker. Correct by reading, not
+  by running — and reading is what found the two bugs above. Worker mode is
+  deliberately off radar until it is wanted properly.
+- ~~**`empira-frankenphp` has no remote.**~~ **DONE.** The repository was created
+  and the package pushed. All five repositories are public and in sync.
+- ~~**Runtime parity was checked for the classic path only.**~~ `nginx + php-fpm`
   and the built-in server were compared and agree (`/` → 200, unknown → 404). The
-  worker was never compared against either, because it has never run.
+  worker was never compared against either, and cannot be while it has never run.
+- ~~**`dev/agents/app.md` and `dev/agents/workspace.md` still describe FrankenPHP
+  as the application's runtime.**~~ **DONE.** Four stale lines in `app.md` and one
+  in `workspace.md`. Corrected during the push rather than left for the next plan:
+  shipping a doc that points at deleted files is actively misleading.
 
 ### 6. Deferred, by decision
 - ~~`Format::Auto` override on `#[Route]`~~ — **not adding it.** htmx's

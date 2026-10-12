@@ -1,7 +1,7 @@
 # AGENTS.md
 
-> **Status: describes shipped code.** Current behaviour, verified against `6 tests,
-> 11 assertions`.
+> **Status: describes shipped code.** Current behaviour, verified against `14
+> tests, 24 assertions` — none of them running an actual worker.
 
 Guidance for AI agents and new contributors working on the Empira FrankenPHP
 module.
@@ -27,11 +27,12 @@ half the file was a thing you had to remember.
 `frankenphp_handle_request` loop, the `gc_collect_cycles()`, the `MAX_REQUESTS`
 bound.
 
-**Owns a base image.** `Dockerfile`, because FrankenPHP cannot be added to a stock
-PHP the way `pdo_pgsql` can: the extension must exist before PHP starts, so there
-is no runtime `-d` flag that substitutes for it. This is the one thing that cannot
-be a bind mount, and it is why this package exists at all rather than the loop
-being a copy-paste.
+**Explains why a base image is unavoidable, but does not ship one.** FrankenPHP
+cannot be added to a stock PHP the way `pdo_pgsql` can: the extension must exist
+before PHP starts, so there is no runtime `-d` flag that substitutes for it. That
+constraint is real and is why this package exists at all rather than the loop
+being a copy-paste — but *whose* image that is remains an application and
+deployment decision. See "Running things".
 
 **Does not own the framework.** `principle/src/` contains no FrankenPHP code. Do not
 add any. The framework's per-request resets in `Application::handle()` run whether
@@ -68,22 +69,41 @@ failure mode rather than pretending to reach the happy path.
 
 ```bash
 composer install
-composer test           # 6 tests
+composer test           # 14 tests
 ```
 
-The Docker image needs the workspace root as context, because the framework and
-auth are Composer path packages:
+**There is no image, and adding one is not a small change.** This package ships no
+`Dockerfile` and no compose file. One existed and was removed: it built an
+application that does not install this package, so the entrypoint it named was
+never created, and an image nobody has ever built is worse than no image in a
+published package.
 
-```bash
-docker compose -f frankenphp/docker/compose.yml up -d --build
-```
+Producing a FrankenPHP image is an application and deployment decision — what else
+goes in it, what runs beside it, where it is built. A stock PHP cannot become
+FrankenPHP at runtime the way an ordinary extension can be loaded with `-d`
+afterwards, so it has to exist before PHP starts.
+
+If you write one, two things have to be true or it will not start:
+
+- The application **requires `iam-adty/empira-frankenphp`**. The reference `app/`
+  deliberately does not, so an image of that app has no `worker.php` to point at.
+- `worker.php` is run **from the application root**, because that is where it looks
+  for `vendor/autoload.php` and `bootstrap/app.php`.
 
 ## Things that will waste your time
 
-- **`$var` in the compose `command` block is Compose's**, not the shell's. Compose
-  interpolates it before `sh` sees it, so `$ext` arrives as empty and the error is
-  about a missing dynamic library. Escape it: `$$ext`. Same trap in any `command:`
-  that is a shell script.
+- **`$var` in a compose `command` block is Compose's**, not the shell's. Compose
+  interpolates it before `sh` sees it, so a shell variable arrives empty and the
+  error is about something else entirely — a missing dynamic library, usually.
+  Escape it: `$$var`. `app/docker-compose.yml` does this for `$ext` in the `php-fpm`
+  `-d` flag, and the same trap applies to any `command:` that is a shell script.
+- **`worker.php` must run from the application root.** It resolves
+  `vendor/autoload.php` and `bootstrap/app.php` against the working directory,
+  because it has two possible locations — `app/vendor/iam-adty/empira-frankenphp/`
+  when installed, a sibling checkout when developing — and those share nothing to
+  be relative to. Searching upward from the file instead finds *this package's*
+  own `vendor/` in the sibling layout and loads the application's dependencies from
+  the wrong install, silently. `EMPIRA_AUTOLOAD` / `EMPIRA_BOOTSTRAP` override it.
 - **`APP_RUNTIME` does not exist here.** It was a branch in the app's front
   controller, which is why that file no longer has a branch.
 - **Worker mode is not the default.** `app/docker-compose.yml` is nginx + php-fpm
@@ -92,6 +112,10 @@ docker compose -f frankenphp/docker/compose.yml up -d --build
 - **Uninstalling this package must be a deletion, not an edit.** It is optional by
   construction. Anything that makes an application depend on it to run has broken
   the premise.
+- **Nothing here has ever run a worker.** The loop, the entrypoint's path
+  resolution and the module's refusal are all covered by tests; no FrankenPHP
+  process has served a request from this package. Treat "it works under a real
+  worker" as unproven.
 
 ## The boundary with `principle`
 
