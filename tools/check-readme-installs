@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+#
+# Run each README's install snippet verbatim, the way a consumer would.
+#
+# A README that cannot be copy-pasted is a README that is wrong, and the only way
+# to know is to paste it. Two bugs in the first version of this script were found
+# this way: it double-wrapped the repositories block, and PHP encoded an empty
+# `require` as `[]`. Neither would have been visible by reading the snippet.
+set -uo pipefail
+status=0
+WORK="${TMPDIR:-/tmp}/empira-readme-check"
+
+# Relative, so this works in any clone and not only on the machine it was written on.
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+
+for pkg in principle auth frankenphp; do
+    readme="$ROOT/$pkg/README.md"
+    work="$WORK/verbatim-$pkg"
+    rm -rf "$work"; mkdir -p "$work"
+
+    # The ```json block and the composer require line, taken verbatim.
+    json=$(awk '/^```json$/{f=1;next} f&&/^```$/{exit} f' "$readme")
+    require=$(awk '/^composer require/{print;exit}' "$readme")
+
+    if [ -z "$json" ] || [ -z "$require" ]; then
+        printf '%-12s SKIPPED — no install snippet found\n' "$pkg"; status=1; continue
+    fi
+
+    # The snippet is the consumer's composer.json body. Add only what a project
+    # must have and a snippet cannot carry: a name, and an object-shaped require.
+    php -r '
+        $snippet = json_decode($argv[1], true, 512, JSON_THROW_ON_ERROR);
+        $manifest = ["name" => $argv[2], "require" => new stdClass()] + $snippet;
+        file_put_contents($argv[3], json_encode($manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+    ' "$json" "consumer/$pkg" "$work/composer.json"
+
+    cd "$work"
+    out=$(eval "$require --no-interaction --no-progress" 2>&1)
+    if echo "$out" | grep -q "Installing iam-adty/empira-$pkg"; then
+        printf '%-12s OK     %s\n' "$pkg" "$(echo "$out" | grep -oE "Installing iam-adty/empira-$pkg \(.*\)" | head -1)"
+    else
+        printf '%-12s FAILED\n' "$pkg"; echo "$out" | tail -5; status=1
+    fi
+    cd "$WORK"
+done
+
+[ "$status" -eq 0 ] && echo && echo "Every README's install snippet works as written."
+exit $status

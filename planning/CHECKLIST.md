@@ -342,7 +342,50 @@ real payoff, and the lock stays as readable as it was.
 alias and that the project declares none — a copy-paste drift to `0.2.x-dev` in one
 manifest is otherwise invisible until something resolves against it.
 
-### 7. Deferred, by decision
+### 7. Documentation truth — shipped 2026-10-12
+
+Documentation that is confidently false is worse than documentation that is
+missing, because a reader has no way to tell. Four classes of it were found and
+fixed; the last one was only findable by running the instructions.
+
+- **A changelog claiming the project had no remote.** "No git tag exists, no remote
+  is configured, and the package is not on Packagist" — three claims, one true. All
+  five repositories are public and pushed. Also corrected for the alias baseline:
+  `0.x releases as a moving target` presumed `0.x` was the release line.
+- **A historical snapshot that read as current.** "No git remote" also appears under
+  *Known limitations — true and unfixed at this point*, where it **was** true. It
+  was left alone; redacting a true historical record to make a document consistent
+  is its own kind of lie. The heading now dates the snapshot and points at the
+  checklist for current state.
+- **A rationale that stopped being true.** The CI workflow "never ran because
+  neither repository has a remote" — the fact stays, the reason is gone.
+- **Security reporting maturity tied to version number.** `SECURITY.md` justified
+  having no disclosure policy by being pre-1.0. It does not, and in a security
+  document that link is worse than saying nothing.
+- **Install instructions that could not run.** Every package 404s on Packagist
+  (verified against the API), and three READMEs opened with a bare
+  `composer require` that fails. Now they show the `repositories` block over
+  https, so they work without an SSH key.
+
+**Requiring the framework at the root is not ceremony**, and only running the
+snippet revealed it. Composer's default `minimum-stability` is `stable`, so a
+transitive dependency on a `dev-` branch is refused:
+
+    - iam-adty/empira-auth dev-main requires iam-adty/empira-principle dev-main
+      -> found iam-adty/empira-principle[dev-main, 0.1.x-dev (alias of dev-main)]
+      but it does not match your minimum-stability.
+
+Both module READMEs now require both packages at the root and quote that error, so
+the cause is recognisable to whoever hits it. `"minimum-stability": "dev"` is the
+one-line alternative and works; it is documented with the reason it is not the
+recommendation — it also lets any other dependency's development branch through.
+
+`dev/tools/check-readme-installs` runs every README's install snippet verbatim and
+fails if any does not work. Two bugs in the first version of that script — it
+double-wrapped the repositories block, and PHP encoded an empty `require` as `[]` —
+were invisible until it was executed, which is the argument for the check existing.
+
+### 8. Deferred, by decision
 - ~~`Format::Auto` override on `#[Route]`~~ — **not adding it.** htmx's
   `overrideMimeType` means htmx traffic is permanently HTML, so a route-level
   force would be a rule with no correct use. `onException()` covers apps that
