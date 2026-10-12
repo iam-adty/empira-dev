@@ -1,0 +1,160 @@
+#!/usr/bin/env bash
+#
+# Check that every package in the workspace is shaped the way its role requires.
+#
+#     dev/tools/module-contract
+#
+# ## Why this lives here and not in principle
+#
+# Enforcing the rule needs to see every package at once, and `principle` is the one
+# package that must not reach outward. A test inside the framework that read
+# `../auth/composer.json` would be the inward dependency `docs/modules.md` argues
+# against, wearing a test's clothes — and it would fail in every lone clone of the
+# framework, which is most of the time. `dev` already knows about all five
+# repositories, so the rule is checked from the one place that is allowed to know.
+#
+# ## What it checks
+#
+# A module is a `library` and requires the framework. An application is a
+# `project` and requires its modules. The framework is a `library` and requires
+# neither. Each of those is a fact about package roles that no single repository
+# can verify alone, and each has a failure mode that is easy to ship past:
+#
+#   - a module marked `project` is not requireable as a dependency at all, and
+#     Composer says so with a resolution error rather than a hint;
+#   - a module requiring the *application* (rather than the framework) inverts the
+#     whole architecture, and Composer will happily install it until the classes
+#     stop existing at runtime;
+#   - a framework that requires a module cannot be installed without it, which
+#     defeats the point of the cut.
+
+set -euo pipefail
+
+cd "$(dirname "${BASH_SOURCE[0]}")/../.."
+
+FRAMEWORK="iam-adty/empira-principle"
+APP="iam-adty/empira-app"
+
+failures=0
+
+field() { php -r '
+    $j = json_decode(file_get_contents($argv[1]), true, 512, JSON_THROW_ON_ERROR);
+    $path = explode(".", trim($argv[2], "."));
+    foreach ($path as $k) {
+        if (!is_array($j) || !array_key_exists($k, $j)) { echo ""; exit; }
+        $j = $j[$k];
+    }
+    echo is_array($j) ? implode(",", $j) : (is_bool($j) ? var_export($j, true) : $j);
+' "$1" "$2"; }
+
+ok()   { printf '  \033[32mok\033[0m    %s\n' "$1"; }
+bad()  { printf '  \033[31mFAIL\033[0m  %s\n' "$1"; failures=$((failures + 1)); }
+
+check() {
+    local dir="$1" role="$2" expected_type="$3"
+    local manifest="$dir/composer.json"
+
+    if [ ! -f "$manifest" ]; then
+        printf '\033[1m%s\033[0m — no composer.json\n' "$dir"
+        failures=$((failures + 1))
+        return
+    fi
+
+    local name type
+    name=$(field "$manifest" name)
+    type=$(field "$manifest" type)
+
+    printf '\033[1m%s\033[0m — %s (%s)\n' "$dir" "$name" "$role"
+
+    if [ "$type" = "$expected_type" ]; then
+        ok "type is $type"
+    else
+        bad "type is '${type:-<unset>}', expected $expected_type"
+    fi
+
+    case "$role" in
+        module)
+            if [ "$(field "$manifest" "require.$FRAMEWORK")" = "dev-main" ]; then
+                ok "requires $FRAMEWORK"
+            else
+                bad "does not require $FRAMEWORK (this is what makes it a module)"
+            fi
+            # The inversion, which is the one this script exists to catch. A
+            # module requiring the application inverts the whole architecture:
+            # Composer installs it happily, every test passes, and it breaks only
+            # when the application is not there — which is precisely when the
+            # module was supposed to be reusable.
+            if [ -n "$(field "$manifest" "require.$APP")" ]; then
+                bad "requires $APP — a module that needs an application is not a module"
+            else
+                ok "does not require an application"
+            fi
+            ;;
+        application)
+            local modules=0
+            while IFS= read -r dep; do
+                [ -n "$dep" ] || continue
+                modules=$((modules + 1))
+            done < <(php -r '
+                $j = json_decode(file_get_contents($argv[1]), true, 512, JSON_THROW_ON_ERROR);
+                foreach (array_keys($j["require"] ?? []) as $k) {
+                    if (str_starts_with($k, "iam-adty/empira-")) { echo $k, "\n"; }
+                }
+            ' "$manifest")
+            if [ "$modules" -gt 0 ]; then
+                ok "requires $modules empira package(s) — an application closes the set"
+            else
+                bad "requires no empira packages; an application with no modules is a framework clone"
+            fi
+            ;;
+        framework)
+            local bad_deps
+            bad_deps=$(php -r '
+                $j = json_decode(file_get_contents($argv[1]), true, 512, JSON_THROW_ON_ERROR);
+                foreach (array_keys($j["require"] ?? []) as $k) {
+                    if (str_starts_with($k, "iam-adty/empira-")) { echo $k, "\n"; }
+                }
+            ' "$manifest")
+            if [ -z "$bad_deps" ]; then
+                ok "depends on no empira package — the dependency runs outward"
+            else
+                bad "depends on $(echo "$bad_deps" | tr '\n' ' ') — core cannot require a feature"
+            fi
+            ;;
+    esac
+
+    # A library's lock is not committed; a project's is. Getting this wrong is
+    # silent: an application that ships without a lock resolves floating, and a
+    # library that commits one pins its consumers to versions it never chose.
+    #
+    # Tracked, not present. `composer install` writes a `composer.lock` into every
+    # package including libraries, and it is gitignored there — so the file is
+    # almost always on disk and almost never committed, and asking the filesystem
+    # reports the opposite of the truth.
+    local tracked
+    tracked=$(git -C "$dir" ls-files --error-unmatch composer.lock 2>/dev/null || true)
+
+    if [ "$role" = "application" ]; then
+        [ -n "$tracked" ] && ok "ships a lock — a project pins what it deploys" \
+            || bad "no committed composer.lock; a deployed project without one is not reproducible"
+    else
+        [ -n "$tracked" ] && bad "commits composer.lock; that is a project's decision" \
+            || ok "no committed lock — a library leaves resolution to its consumers"
+    fi
+}
+
+echo "Package roles"
+
+check principle framework library
+check auth      module    library
+check frankenphp module   library
+check app       application project
+
+echo
+if [ "$failures" -eq 0 ]; then
+    echo "All packages are shaped correctly."
+else
+    echo "$failures problem(s) found." >&2
+fi
+
+exit $(( failures > 0 ? 1 : 0 ))
