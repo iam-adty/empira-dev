@@ -34,6 +34,11 @@ cd "$(dirname "${BASH_SOURCE[0]}")/../.."
 
 FRAMEWORK="iam-adty/empira-principle"
 APP="iam-adty/empira-app"
+# The one version line every library shares. See CHECKLIST.md §6: this is a
+# development alias, deliberately ending in `-dev`, because Composer parses `0.1.0`
+# and `0.0.1` as **stable** — so a `0.x` tag would mark a release. Nothing is
+# tagged; a tag cannot move and would cost a constraint bump per consumer per change.
+ALIAS="0.1.x-dev"
 
 failures=0
 
@@ -140,6 +145,42 @@ check() {
     else
         [ -n "$tracked" ] && bad "commits composer.lock; that is a project's decision" \
             || ok "no committed lock — a library leaves resolution to its consumers"
+    fi
+
+    # The version line. A library aliases its branch so a consumer can express a
+    # version constraint before anything is released; a project does not, because
+    # a project is not versioned.
+    #
+    # The libraries must *agree*, and that is the part that rots. Three manifests
+    # carrying the same line by hand drifts the first time one is edited alone, and
+    # a library on `0.2.x-dev` while its framework is on `0.1.x-dev` resolves
+    # nothing — as a resolution error in the consumer, pointing at the consumer.
+    local alias
+    alias=$(field "$manifest" "extra.branch-alias.dev-main")
+
+    if [ "$role" = "application" ]; then
+        [ -z "$alias" ] && ok "declares no branch alias — a project is not versioned" \
+            || bad "declares branch alias '$alias'; a project is not versioned"
+    else
+        if [ -z "$alias" ]; then
+            bad "no branch alias; a library should say what its dev version means"
+        elif [ "$alias" != "$ALIAS" ]; then
+            bad "branch alias is '$alias', workspace uses '$ALIAS'"
+        else
+            ok "branch alias $ALIAS"
+        fi
+    fi
+
+    # No releases yet, so no tags. A tag is the thing that makes Composer treat a
+    # version as stable, and `0.x` would have done that silently — Composer parses
+    # 0.1.0 as stable. Delete this check the day there is a real consumer and a
+    # deliberate first release; it exists to make "not released" enforceable rather
+    # than a thing anyone has to remember.
+    if [ "$role" != "application" ]; then
+        local tags
+        tags=$(git -C "$dir" tag 2>/dev/null | tr '\n' ' ')
+        [ -z "$tags" ] && ok "untagged — no release has been cut" \
+            || bad "tagged ($tags); nothing has been released and a tag makes a version stable to Composer"
     fi
 }
 

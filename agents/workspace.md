@@ -156,7 +156,21 @@ each other — except the image build, which needs all three.
 Each package requires `dev-main`, so it tracks the **branch**, not a release. A
 change to `principle/main` can therefore break `app`'s install. `app` is the one
 package that commits its `composer.lock`, so its own build is pinned; the two
-libraries are not. Tag them when a change should not land on everyone at once.
+libraries are not.
+
+**Do not tag to stage a change.** That is the instinct, and it is the expensive
+one here: a tag cannot move, so every consumer needs a constraint bump and a
+re-lock, and nothing outside this workspace depends on these packages anyway. A
+change that should not land on consumers at once goes on a **branch** and is
+merged when it is ready — `composer require iam-adty/empira-principle:dev-feature`
+resolves a branch as well as `main`.
+
+All three libraries share one branch alias, `0.1.x-dev`, so a consumer can write
+`^0.1@dev` instead of only `dev-main`. `module-contract` checks they agree and
+that nothing is tagged; both of those exist because the obvious alternative —
+tagging `0.x` — makes Composer treat the version as **stable**, since it parses
+`0.1.0` and `0.0.1` that way. The first release, when there is a reason for one,
+should be `0.1.0-alpha.N`.
 
 **A dependency that is not mounted is a dependency whose edits do not take.**
 `app/docker-compose.yml` bind-mounts `principle/src` *and* `auth/src`; the

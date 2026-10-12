@@ -275,7 +275,74 @@ the README, because it is true — FrankenPHP cannot be added to a stock PHP the
   in `workspace.md`. Corrected during the push rather than left for the next plan:
   shipping a doc that points at deleted files is actively misleading.
 
-### 6. Deferred, by decision
+### 6. Versioning baseline — decided 2026-10-12
+
+**Branch alias, no tags, not yet.** All three libraries declare
+
+```json
+"extra": { "branch-alias": { "dev-main": "0.1.x-dev" } }
+```
+
+Dependencies still require `dev-main`; it now resolves as
+`0.1.9999999.9999999.9999999-dev` instead of the meaningless `dev-main`. The
+project, `app`, declares no alias — a project is not versioned.
+
+**Why an alias and not `0.x`.** Composer parses `0.1.0` and `0.0.1` as
+**`stable`**. Verified against Composer 2.10.2's `VersionParser`, not assumed:
+
+| Tag | Stability |
+|---|---|
+| `v1.0.0`, `v0.1.0`, `v0.0.1` | `stable` |
+| `v0.1.0-alpha.1` | `alpha` |
+| `dev-main` | `dev` |
+
+So a `0.x` tag would mark a release by Composer's own rules, which is the one
+thing this decision exists to prevent. Only `-alpha.N` / `-beta.N` / `-RC.N` and
+`dev-*` are non-stable, which is why the alias ends in `-dev`.
+
+**Why no tag.** Nothing outside this workspace consumes these packages. A tag
+earns nothing today and costs a constraint bump plus a re-lock for every change,
+because a tag cannot move. Revisit when there is a real consumer or a Packagist
+release; **`0.1.0-alpha.N` is the shape to use then**, because `alpha` is
+genuinely non-stable and `0.x` promises nothing about a 1.0 API.
+
+**What this does not fix.** `app`'s lock had drifted five commits behind
+`principle`. That was never caused by the absence of tags — `composer install`
+honouring the lock is the lock doing its job, and `app/vendor` matched its lock
+exactly. Regenerate with `composer update iam-adty/*` when the app should be
+current; do not run it on a schedule chasing a number.
+
+**Two ordering facts that cost time to find:**
+
+- **Push the alias commits before regenerating the app's lock.** A branch alias is
+  read from the *fetched* `composer.json`, so a lock recording an aliased version
+  depends on the alias existing at the locked commit. Updating first locks a
+  tagless commit, and the lock then disagrees with every manifest.
+- **The alias is cosmetic, not a resolver change.** Nothing about which commit is
+  selected differs; only the version string it is recorded under.
+
+**What the alias does and does not do** — worth being exact, because the obvious
+assumption is wrong:
+
+| | Before | After |
+|---|---|---|
+| `composer show` | `dev-main` | `0.1.x-dev, dev-main` |
+| Require by branch: `dev-main` | works | works |
+| Require by version: `^0.1@dev` | **no such version** | works |
+| `composer.lock` records | `dev-main` | **`dev-main` — unchanged** |
+
+The lock keeps the literal branch name. A branch alias influences constraint
+matching and what `composer show` lists; it does not rewrite the `version` field
+Composer writes for a package installed from a VCS branch. That was expected to
+change and did not, and it is the honest limit of what this buys: a consumer can
+now express a *version* constraint instead of only a branch name, which is the
+real payoff, and the lock stays as readable as it was.
+
+`dev/tools/module-contract` checks that all three libraries declare an identical
+alias and that the project declares none — a copy-paste drift to `0.2.x-dev` in one
+manifest is otherwise invisible until something resolves against it.
+
+### 7. Deferred, by decision
 - ~~`Format::Auto` override on `#[Route]`~~ — **not adding it.** htmx's
   `overrideMimeType` means htmx traffic is permanently HTML, so a route-level
   force would be a rule with no correct use. `onException()` covers apps that
