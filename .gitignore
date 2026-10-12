@@ -1,0 +1,4 @@
+# Ideas are sketches. Some are worth keeping; most are not, and a repository that
+# only ever grows is a repository nobody reads. Commit the ones that mattered.
+/ideas/*
+!/ideas/README.md

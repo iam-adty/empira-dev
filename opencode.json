@@ -1,0 +1,36 @@
+{
+    "$schema": "https://opencode.ai/config.json",
+    "//instructions": "Relative to THIS file's directory, which is dev/ — not the package the docs belong to. `agents/principle.md` is this project's AGENTS.md, which moved out of principle/; the `docs/` entries stayed in principle/ because they are published reference material, not agent instruction.",
+    "instructions": [
+        "agents/principle.md",
+        "../principle/CONTRIBUTING.md",
+        "../principle/docs/components.md",
+        "../principle/docs/routing.md",
+        "../principle/docs/views.md",
+        "../principle/docs/http.md",
+        "../principle/docs/testing.md",
+        "../principle/docs/workers.md",
+        "../principle/docs/recipes.md"
+    ],
+    "permission": {
+        "bash": {
+            "*": "ask",
+            "composer test": "allow",
+            "composer validate": "allow",
+            "vendor/bin/phpunit*": "allow",
+            "php -l *": "allow",
+            "php bin/empira *": "allow",
+            "git status*": "allow",
+            "git diff*": "allow",
+            "git log*": "allow",
+            "docker compose *": "allow",
+            "curl * 127.0.0.1*": "allow",
+            "curl * localhost*": "allow",
+            "grep *": "allow",
+            "find *": "allow",
+            "xargs *": "allow",
+            "sed *": "allow",
+            "sed -i*": "deny"
+        }
+    }
+}

@@ -1,0 +1,162 @@
+# AGENTS.md
+
+> **This file is [`dev/agents/workspace.md`](workspace.md).** The path at the
+> workspace root is a symlink to it, and it is the symlink that OpenCode finds —
+> see the note on discovery below before moving anything that lives in `dev/`.
+
+## What this directory is
+
+A workspace holding **three independent Composer packages**. No build depends on
+the others being in this directory — `app/` requires `principle/` and `auth/` the
+way any application requires a framework, except that here they are symlinked
+from this filesystem.
+
+```
+.
+├── principle/   git repo   iam-adty/empira-principle   Empira\             the framework
+├── auth/        git repo   iam-adty/empira-auth        Empira\Auth\        authentication, as a module
+├── app/         git repo   iam-adty/empira-app         App\                a bare skeleton
+└── dev/         git repo   (not a package)                                  AI material, plans, skills
+```
+
+Nothing here is versioned at the workspace root — there is no repository there,
+and adding one would tie the three packages together in a way that makes them
+harder to publish independently. `dev/` is a fourth repository for the material
+that belongs to none of the three.
+
+**The dependency runs outward.** `auth` requires `principle`; `app` requires both.
+The framework requires neither, and boots, serves requests, maps entities and
+runs migrations without them.
+
+That direction is not an accident. Authentication used to live inside the
+framework's spine — `Application` imported `Auth`, built one per request, and
+`orm()` would not describe a configuration without mapping a `users` table. Every
+application carried a users table whether it wanted one or not, and "make it
+optional" was a rewrite rather than a move. A dependency that runs *inward*, from
+core to feature, is one that cannot be cut.
+
+## Start here
+
+| You are working on | Read |
+|---|---|
+| the framework | [`principle.md`](principle.md) |
+| authentication | [`auth.md`](auth.md) |
+| the application | [`app.md`](app.md) |
+| plans and specs | [`../planning/CHECKLIST.md`](../planning/CHECKLIST.md), [`../planning/SPEC.md`](../planning/SPEC.md) |
+
+Then the reference, which stays in the framework package because it ships to
+consumers: [`principle/docs/`](principle/docs/).
+
+**A session started inside a package reads this file, not that package's.**
+OpenCode traverses *up* from the working directory and stops at the nearest git
+worktree, so `../dev/` is never reached from inside `principle/`. One canonical
+set of instructions, rather than four that can drift — but the package guidance
+is one file away in `dev/agents/`.
+
+## Rules for this workspace
+
+**Every plan goes in the sidebar.** Any plan or to-do list must be written with
+the todo tool, not only described in prose. Prose scrolls away, and a list that
+never changes is worse than no list because it looks like progress tracking. Write
+it when the plan exists, and update it as items complete, are dropped, or turn out
+to be unnecessary.
+
+**Git is per package, not here.** `principle/`, `auth/` and `app/` each have
+their own repository. Do not `git init` here, and do not commit from this
+directory — there is no repository and adding one would make the packages harder
+to publish independently. `dev/` is the exception, and it was deliberate: the AI
+material spans all three packages and belongs to none, so it is versioned as a
+fourth repository rather than dropped.
+
+**The root README is a note, not an artefact.** It is not versioned by any repo,
+so it can drift from the code without anyone noticing. **The code is the source
+of truth**; if it disagrees, it is wrong.
+
+**Work in the package, not here.** Code changes belong in one package's `src/`,
+committed to that package's own repository. AI material belongs in `dev/`.
+
+**A module may not make the framework depend on it.** If a feature seems to need
+something from core's spine, the question is whether core can answer it *without
+knowing what the feature is about*. Usually it can, and the honest answer is a
+narrower contract — `Security\Identity` and `Security\Guard` exist because
+"who is asking" is answerable without owning what a user is.
+
+**A module may not make the framework depend on it.** If a feature seems to need
+something from core's spine, the question is whether core can answer it *without
+knowing what the feature is about*. Usually it can, and the honest answer is a
+narrower contract — `Security\Identity` and `Security\Guard` exist because
+"who is asking" is answerable without owning what a user is.
+
+## Running things
+
+```bash
+# the framework — needs Docker, for PostgreSQL
+cd principle && composer test          # 473 tests
+
+# the auth module — no Docker, SQLite
+cd auth && composer test               # 37 tests
+
+# the application — no Docker
+cd app && composer test                # 15 tests
+```
+
+Scratch files belong in the workspace `tmp/`, never `/tmp`. It sits above all
+three packages and is mounted into every container, so one relative path —
+`dirname(__DIR__, 2) . '/tmp'` — finds it from the host and from inside a runner.
+It should hold nothing at all: every test that creates a fixture there removes it,
+and `ls -A tmp` is how you check that it did.
+
+```bash
+ls -A tmp
+```
+
+```bash
+cd app && composer serve               # http://localhost:8000
+docker compose -f app up -d --build    # http://localhost:8080, PostgreSQL
+```
+
+`app` links `principle` and `auth` through
+[franzl/studio](https://packagist.org/packages/franzl/studio), so an edit under
+either `src/` is live on reload — no rebuild.
+
+```bash
+cd app && vendor/bin/studio load ../principle
+cd app && vendor/bin/studio load ../auth
+cd app && composer update iam-adty/empira-principle iam-adty/empira-auth
+```
+
+Each package requires `dev-main`, so it tracks the **branch**, not a release.
+Once the libraries are tagged, those constraints should change.
+
+**A dependency that is not mounted is a dependency whose edits do not take.**
+`app/docker-compose.yml` bind-mounts `principle/src` *and* `auth/src`; the
+`Dockerfile` declares path repositories for both. Adding a fourth package means
+adding it in both places, and the symptom of forgetting is a change that "did not
+work" rather than an error.
+
+## The application is a skeleton on purpose
+
+`app/` is three files of source. It was a demo — sign-in, registration, a
+dashboard, rate limiting, eight components — and all of that is gone.
+
+A skeleton somebody copies arrives with decisions already made by someone else: a
+rate limiter you did not ask for, a session strategy you have to unpick, demo
+credentials seeded on first boot. Each is a thing to *remove*, and removal is
+slower than never having it.
+
+**The trade is real:** the app no longer demonstrates what the framework can do.
+Authentication is demonstrated by `auth/`'s 37 tests, components and routing by
+the framework's 473. If you are looking for a worked example of a feature, look
+there rather than in the app.
+
+## Cross-repository status
+
+Planned work is tracked in [`../planning/CHECKLIST.md`](../planning/CHECKLIST.md) and
+[`../planning/SPEC.md`](../planning/SPEC.md), both in `dev/`. Nearly all of it is
+framework-side, with the application following once the framework lands — which is
+why those files live in a repository of their own rather than inside one of the
+three, where they would look like one package's private plans.
+
+## Skills
+
+Use the skill tool to load a skill when a task matches its description.
