@@ -5,7 +5,7 @@
 > a bug.
 
 Framework: `iam-adty/empira-principle` · app: `iam-adty/empira-app`
-Current: **483 framework tests / 1082 assertions**, **37 auth tests / 71 assertions**, **14 frankenphp tests / 24 assertions**, **17 app-test tests / 31 assertions** (in the generated `app-test/`, not in `app/`).
+Current: **487 framework tests / 1089 assertions**, **37 auth tests / 71 assertions**, **14 frankenphp tests / 24 assertions**, **19 app-test tests / 35 assertions** (in the generated `app-test/`, not in `app/`).
 
 ---
 
@@ -466,7 +466,7 @@ and queries it, Migrations plans against it.
   SQLite would create an empty file and the application would report having no
   data.
 - ~~`tools/test` runs on the host~~ — a daemon, an image and a container per run
-  were being spent on 480 tests that open a file. The suite is 483 tests in 0.7s
+  were being spent on 480 tests that open a file. The suite is 487 tests in 0.7s
   with nothing started. **The early-exit check is unchanged and re-proved**: bare
   `phpunit` returns 0 on a truncated run; `tools/test` returns 1 and says why.
 - ~~Every container artifact deleted~~ — `principle/{Dockerfile,docker-compose.yml,.dockerignore}`,

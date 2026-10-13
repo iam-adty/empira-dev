@@ -43,4 +43,40 @@ final class BootContractTest extends TestCase
     {
         self::assertSame([], App::boot()->commands(), 'boot registered a command of its own');
     }
+
+    /**
+     * The console boot is not a smaller application.
+     *
+     * `empira migrate` plans across every module's migrations and `route:list`
+     * reads the route table, so a console that saw less than the web would
+     * migrate a schema missing every table a module owns — and would fail at
+     * runtime, on the first query, a long way from the cause. One private
+     * `build()` is what stops the two drifting; this is the test for it.
+     */
+    public function testTheConsoleBootSeesWhatTheWebBootSees(): void
+    {
+        $web = App::boot();
+        $console = App::bootConsole();
+
+        self::assertCount(count($web->modules()), $console->modules());
+        self::assertCount(count($web->routes()->all()), $console->routes()->all());
+
+        // The ORM is configured by the same call in both, so it has to be
+        // configured rather than merely absent.
+        self::assertSame(
+            $web->entities()->getConnection()->getParams(),
+            $console->entities()->getConnection()->getParams(),
+            'the console booted against a different database',
+        );
+    }
+
+    /**
+     * And it registers nothing either, so `bootstrap/app.php`'s
+     * `discoverCommands()` is the only thing that can put a command in a
+     * skeleton.
+     */
+    public function testTheConsoleBootRegistersNoCommandsOfItsOwn(): void
+    {
+        self::assertSame([], App::bootConsole()->commands());
+    }
 }
