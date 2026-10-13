@@ -33,7 +33,7 @@ into both the test runner and the app stack, and the worker watches it. Build
 once; after that an edit is an edit in the running system. The only things that
 need `docker compose build` are listed under [Rebuilding](#rebuilding).
 
-## The four checks
+## The checks
 
 ### 1. Lint
 
@@ -44,6 +44,24 @@ find src tests -name '*.php' -print0 | xargs -0 -n1 php -l
 
 Every line must read `No syntax errors detected`. Include `bin/empira` — it is
 PHP without the extension and has been missed by `find -name '*.php'` before.
+
+### 1a. Documentation gates
+
+Run these before the suite. None needs Docker, they finish in seconds, and they
+catch the failures a green suite cannot — a test suite says nothing about whether
+a document still describes the code.
+
+```bash
+dev/tools/module-contract              # every package shaped like its role
+dev/tools/check-links                  # every doc link resolves, every anchor exists
+dev/tools/check-readme-installs        # every README's install snippet works as written
+```
+
+`check-links` is the one to reach for after editing documentation. It is strict
+on purpose: inside a published package a relative link that escapes that package
+is a failure, because it resolves here — this workspace holds four repositories
+side by side — and is a 404 for anyone holding one. A plain existence check
+passes that class forever.
 
 ### 2. Suite
 
@@ -74,7 +92,7 @@ contract end to end.
 cd auth && composer test          # 37 tests, 71 assertions
 cd auth && composer validate      # must be clean
 cd app  && composer validate      # must be clean — app/ has no suite of its own
-dev/tools/app-test check          # 20 tests, 41 assertions — the generated app-test/
+dev/tools/app-test check          # 17 tests, 31 assertions — the generated app-test/
 ```
 
 A change to `principle/src/Security/` or to the module contract is not finished
@@ -250,6 +268,9 @@ produce.**
 ## Before committing
 
 ```bash
+dev/tools/module-contract
+dev/tools/check-links
+dev/tools/check-readme-installs
 cd principle && composer test
 cd auth && composer test
 dev/tools/app-test check
@@ -259,8 +280,9 @@ ls -A ../tmp          # nothing but .boot.lock
 git status            # nothing unexpected, no vendor
 ```
 
-If you touched `app/`, run its suite too — it is the integration test for the
-framework.
+If you touched `app/`, `dev/tools/app-test check` is its suite — `app/` itself
+ships none, by decision, and that check builds the scratch application from the
+skeleton.
 
 ## Reference
 

@@ -113,11 +113,22 @@ degradation is only safe if it is known to be one.
 cd principle && composer test    # 473 tests, in Docker against PostgreSQL
 cd auth      && composer test    # 37 tests, SQLite
 cd frankenphp && composer test   # 14 tests, SQLite
-dev/tools/app-test check         # 20 tests, in the generated app-test/
+dev/tools/app-test check         # 17 tests, in the generated app-test/
 ```
 
-`dev/` has no build and no test suite. It holds instructions about the code, not
-code.
+And three checks, none of which need Docker:
+
+```bash
+dev/tools/module-contract        # every package shaped like its role
+dev/tools/check-links            # every doc link resolves, every anchor exists
+dev/tools/check-readme-installs  # every README's install snippet works as written
+```
+
+`dev/` has no build and no test suite. It holds instructions about the code — and
+the exception is `dev/tools/`, which is executable on purpose. Those four scripts
+are this repository's enforcement: each one makes a rule that used to live in
+somebody's memory fail loudly instead. They are deliberately not a package, and
+nothing in `dev/` depends on them to run.
 
 ## Rules
 

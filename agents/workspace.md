@@ -115,7 +115,16 @@ cd auth && composer test               # 37 tests
 cd frankenphp && composer test         # 14 tests
 
 # the application — no Docker, SQLite, and not in app/:
-dev/tools/app-test check               # 20 tests, in the generated app-test/
+dev/tools/app-test check               # 17 tests, in the generated app-test/
+```
+
+And three checks, none of which need Docker — run these before claiming
+something works, because they catch what a green suite cannot:
+
+```bash
+dev/tools/module-contract              # every package shaped like its role
+dev/tools/check-links                  # every doc link resolves, every anchor exists
+dev/tools/check-readme-installs        # every README's install snippet works as written
 ```
 
 Scratch files belong in the workspace `tmp/`, never `/tmp`. It sits above all
