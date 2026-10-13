@@ -2,3 +2,7 @@
 # only ever grows is a repository nobody reads. Commit the ones that mattered.
 /ideas/*
 !/ideas/README.md
+
+# Caches for dev/tools. Local only: a cached verdict is worthless on another
+# machine, and committing one would look like evidence.
+/.cache/

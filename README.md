@@ -130,6 +130,9 @@ are this repository's enforcement: each one makes a rule that used to live in
 somebody's memory fail loudly instead. They are deliberately not a package, and
 nothing in `dev/` depends on them to run.
 
+`dev/.cache/` holds one of those caches and is gitignored. A cached verdict is
+worthless on another machine, and committing one would look like evidence.
+
 ## Rules
 
 - **Plans go in the todo tool**, so they appear in the opencode TUI sidebar.

@@ -63,6 +63,18 @@ is a failure, because it resolves here — this workspace holds four repositorie
 side by side — and is a 404 for anyone holding one. A plain existence check
 passes that class forever.
 
+`check-readme-installs` costs ~3 minutes cold and ~0.04s warm. Composer resolves a
+`https://github.com/…` VCS repository through the **GitHub API** rather than
+through git, and unauthenticated that is sixty requests an hour — enough for this
+one script to hit the ceiling on a run where nothing had changed. So its verdicts
+are cached under the commit **and the snippet text**, and `dev/.cache/` is
+gitignored. An unchanged rerun makes no network call; edit the snippet or move a
+commit and it re-runs for that package alone. `--refresh` forces all three.
+
+If it ever does fail on the limit, it says so in those words — Composer's own
+message for it is an authentication error, which sends you hunting for a token
+you do not need.
+
 ### 2. Suite
 
 ```bash

@@ -2,29 +2,73 @@
 #
 # Run each README's install snippet verbatim, the way a consumer would.
 #
+#     dev/tools/check-readme-installs
+#     dev/tools/check-readme-installs --refresh    # ignore the cache
+#
 # A README that cannot be copy-pasted is a README that is wrong, and the only way
 # to know is to paste it. Two bugs in the first version of this script were found
 # this way: it double-wrapped the repositories block, and PHP encoded an empty
 # `require` as `[]`. Neither would have been visible by reading the snippet.
+#
+# ## Why there is a cache
+#
+# Because Composer resolves a `https://github.com/…` VCS repository through the
+# **GitHub API**, not through git. Unauthenticated, that is sixty requests an hour
+# per IP, and each of the three packages costs several — so this script reached
+# the ceiling often enough to fail on runs where nothing had changed, with an
+# authentication error and a `require` usage dump instead of a verdict.
+#
+# The remedy is to not make the request. An install of `iam-adty/empira-principle`
+# at commit `1a584c8`, from a snippet that has not changed, either works or it
+# does not; running it again cannot find out. So the outcome is cached against
+# **both** the commit and the exact snippet, and a run with nothing moved costs
+# no network at all.
+#
+# The snippet is part of the key deliberately. Caching on the commit alone would
+# let a rewritten README keep passing on the old snippet's verdict — which is the
+# one thing this script exists to catch.
+#
+# `COMPOSER_AUTH` or `GH_TOKEN` raises the limit rather than avoiding it, and this
+# script does not require either.
 set -uo pipefail
-status=0
-WORK="${TMPDIR:-/tmp}/empira-readme-check"
 
-# Relative, so this works in any clone and not only on the machine it was written on.
+REFRESH=0
+[ "${1:-}" = "--refresh" ] && REFRESH=1
+
+status=0
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+WORK="${TMPDIR:-/tmp}/empira-readme-check"
+CACHE="$ROOT/dev/.cache/check-readme-installs"
+
+mkdir -p "$CACHE"
 
 for pkg in principle auth frankenphp; do
     readme="$ROOT/$pkg/README.md"
     work="$WORK/verbatim-$pkg"
-    rm -rf "$work"; mkdir -p "$work"
+    repo="$ROOT/$pkg"
 
     # The ```json block and the composer require line, taken verbatim.
     json=$(awk '/^```json$/{f=1;next} f&&/^```$/{exit} f' "$readme")
     require=$(awk '/^composer require/{print;exit}' "$readme")
 
     if [ -z "$json" ] || [ -z "$require" ]; then
-        printf '%-12s SKIPPED — no install snippet found\n' "$pkg"; status=1; continue
+        printf '%-12s SKIPPED — no install snippet found\n' "$pkg"
+        status=1
+        continue
     fi
+
+    commit=$(git -C "$repo" rev-parse --short HEAD 2>/dev/null || echo unknown)
+
+    # Commit *and* snippet: see the header for why the second half is not optional.
+    key=$(printf '%s\n%s\n%s\n%s' "$pkg" "$commit" "$json" "$require" | sha256sum | cut -c1-16)
+
+    if [ "$REFRESH" -eq 0 ] && [ -f "$CACHE/$pkg.$commit.$key" ]; then
+        printf '%-12s OK     %s (cached)\n' "$pkg" "$(cat "$CACHE/$pkg.$commit.$key")"
+        continue
+    fi
+
+    rm -rf "$work"
+    mkdir -p "$work"
 
     # The snippet is the consumer's composer.json body. Add only what a project
     # must have and a snippet cannot carry: a name, and an object-shaped require.
@@ -34,14 +78,35 @@ for pkg in principle auth frankenphp; do
         file_put_contents($argv[3], json_encode($manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
     ' "$json" "consumer/$pkg" "$work/composer.json"
 
-    cd "$work"
-    out=$(eval "$require --no-interaction --no-progress" 2>&1)
+    out=$(cd "$work" && eval "$require --no-interaction --no-progress" 2>&1)
+
     if echo "$out" | grep -q "Installing iam-adty/empira-$pkg"; then
-        printf '%-12s OK     %s\n' "$pkg" "$(echo "$out" | grep -oE "Installing iam-adty/empira-$pkg \(.*\)" | head -1)"
+        resolved=$(echo "$out" | grep -oE "Installing iam-adty/empira-$pkg \(.*\)" | head -1)
+        printf '%-12s OK     %s\n' "$pkg" "$resolved"
+
+        # The verdict is stored under the key it was reached with — commit *and*
+        # snippet — so a rewritten README cannot keep passing on the old one's
+        # result. Entries for other keys are dropped as they go stale, or a
+        # package edited ten times leaves ten verdicts behind.
+        printf '%s' "$resolved" > "$CACHE/$pkg.$commit.$key"
+        find "$CACHE" -maxdepth 1 -name "$pkg.*" ! -name "$pkg.$commit.$key" -delete 2>/dev/null
     else
-        printf '%-12s FAILED\n' "$pkg"; echo "$out" | tail -5; status=1
+        printf '%-12s FAILED\n' "$pkg"
+
+        # A rate limit is not a broken README, and saying so is the difference
+        # between a rerun and an afternoon. Composer's own message for it is an
+        # authentication error, which sends you looking for a token you do not
+        # need — the limit is the actual cause.
+        if echo "$out" | grep -qiE "Could not authenticate against github\.com|rate limit"; then
+            echo "        GitHub API rate limit reached — this is not a problem with the snippet."
+            echo "        Nothing changed since the last run? A cached verdict would have been used;"
+            echo "        this one ran because $pkg is at a commit not seen before, or --refresh was given."
+            echo "        Set GH_TOKEN to raise the limit, or retry later."
+        fi
+
+        echo "$out" | tail -5
+        status=1
     fi
-    cd "$WORK"
 done
 
 [ "$status" -eq 0 ] && echo && echo "Every README's install snippet works as written."
