@@ -123,7 +123,7 @@ something works, because they catch what a green suite cannot:
 
 ```bash
 dev/tools/module-contract              # every package shaped like its role
-dev/tools/check-links                  # every doc link resolves, every anchor exists
+dev/tools/check-links                  # links, anchors, and named APIs all exist
 dev/tools/check-readme-installs        # every README's install snippet works as written
 ```
 

@@ -53,7 +53,7 @@ a document still describes the code.
 
 ```bash
 dev/tools/module-contract              # every package shaped like its role
-dev/tools/check-links                  # every doc link resolves, every anchor exists
+dev/tools/check-links                  # links, anchors, and named APIs all exist
 dev/tools/check-readme-installs        # every README's install snippet works as written
 ```
 
@@ -62,6 +62,14 @@ on purpose: inside a published package a relative link that escapes that package
 is a failure, because it resolves here — this workspace holds four repositories
 side by side — and is a 404 for anyone holding one. A plain existence check
 passes that class forever.
+
+It also checks the **classes and methods the prose names**, which is what caught
+`App::bootLock()` in a shipped page and `Empira\Data\Connection` in the
+framework's own README — both read correctly, both were gone. Public and
+protected members both count, because documenting a method you are meant to
+override is the documented path rather than an error. Sentences describing
+history are skipped, so the framework's deleted `Grammar` layer stays nameable
+without the tool asking you to erase the reason it was deleted.
 
 `check-readme-installs` costs ~3 minutes cold and ~0.04s warm. Composer resolves a
 `https://github.com/…` VCS repository through the **GitHub API** rather than

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
-# Check that every relative link in the documentation resolves, and every anchor
-# exists.
+# Check that the documentation resolves: every link, every anchor, and every
+# class or method it names.
 #
 #     dev/tools/check-links
 #
@@ -34,13 +34,29 @@
 #      URL, which is already the convention in the places that learned it the hard
 #      way.
 #
+# ## And a third, added later
+#
+# A link can be perfect and the sentence still wrong. `docs/workers.md` documented
+# `App::bootLock()`, which has never existed in any package, and used it to advise
+# putting migrations back into boot. `principle/README.md` introduced
+# `Empira\Data\Connection`, deleted when `src/Data/` went to Doctrine. SPEC.md
+# named `Application::errorResponse()` as shipped surface when it is private.
+#
+# All three read correctly, and all three were only findable by diffing what the
+# code declares against what the prose names. So the tool does that too — with
+# public and protected members both counted, because documenting a method you are
+# meant to override is the documented path, not an error.
+#
 # ## What it deliberately does not check
 #
 # `app-test/` — it is generated from `app/`, so its markdown is a copy of markdown
 # already checked here. `vendor/`, for the usual reasons.
 #
 # Links inside fenced code blocks are skipped. A `](…)` in a fenced block is
-# sample text, and treating it as a link produces failures nobody can act on.
+# sample text, and treating it as a link produces failures nobody can act on. A
+# sentence describing history is skipped for the same reason: the framework's
+# `Grammar` layer has to stay nameable after it is gone, or the rule cannot be
+# fixed without erasing why it was fixed.
 
 set -euo pipefail
 
@@ -299,6 +315,200 @@ foreach ($files as $relative) {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Documented API references
+//
+// `check-links` proves a link points at something. It cannot tell that the thing
+// it points at still exists, and two defects survived every other check here
+// because of it:
+//
+//   * docs/workers.md documented `App::bootLock()`, which has never existed in
+//     any package, and used it to advise putting migrations back into boot
+//   * principle/README.md introduced `Empira\Data\Connection`, deleted when
+//     src/Data/ went to Doctrine
+//
+// Both read correctly. Both were only findable by diffing what the code declares
+// against what the prose names, which nobody was doing.
+//
+// ## What is deliberately not checked
+//
+// A line describing history. "The framework's `Grammar` layer is gone" must stay
+// able to say `Grammar`, or the rule cannot be fixed without erasing the reason
+// it was fixed. Struck-through lines, and lines carrying a past-tense marker, are
+// skipped — with the marker list below, which is a judgement call rather than a
+// proof. A reference that slips past it is missed, not flagged wrongly, and that
+// is the better failure: this check should never make someone delete a true
+// sentence about the past.
+$historical = [
+    'used to', 'no longer', 'does not exist', 'doesn\'t exist', 'was a', 'were ',
+    'once ', 'removed', 'goes away', 'former', 'deleted', 'existed and was',
+    'not adding', 'never existed', 'a skeleton', 'pre-', 'formerly',
+];
+
+/** @return array<string, array{file: string, methods: array<string, bool>}> */
+$apiClasses = [];
+
+/** Every namespace that a real class lives in, at every level. */
+$apiNamespaces = [];
+
+foreach (['principle/src', 'auth/src', 'frankenphp/src', 'app/src'] as $base) {
+    if (!is_dir($base)) {
+        continue;
+    }
+
+    $iterator = new RecursiveIteratorIterator(
+        new RecursiveDirectoryIterator($base, FilesystemIterator::SKIP_DOTS)
+    );
+
+    foreach ($iterator as $file) {
+        if (!$file->isFile() || $file->getExtension() !== 'php') {
+            continue;
+        }
+
+        $source = (string) file_get_contents($file->getPathname());
+
+        if (preg_match('/^namespace\s+([^;]+);/m', $source, $ns) !== 1) {
+            continue;
+        }
+
+        if (preg_match('/^(?:final\s+|abstract\s+)?(?:class|interface|enum|trait)\s+(\w+)/m', $source, $cl) !== 1) {
+            continue;
+        }
+
+        $fqcn = trim($ns[1]) . '\\' . $cl[1];
+
+        // `Empira\Auth` is a namespace in the docs and a class nowhere. Collected
+        // from the classes rather than listed, so it stays right when a class is
+        // added or moved.
+        $parts = explode('\\', $fqcn);
+        array_pop($parts);
+
+        for ($i = 1; $i <= count($parts); $i++) {
+            $apiNamespaces[implode('\\', array_slice($parts, 0, $i))] = true;
+        }
+
+        $methods = [];
+
+        // Public **and protected**. A protected method is documented on purpose:
+        // `Layout::styles()` exists in these docs precisely to tell you to
+        // override it, and reporting that would be the checker telling someone to
+        // delete the sentence that explains the framework.
+        //
+        // Private is the interesting case. `Application::errorResponse()` is what
+        // SPEC.md named as shipped surface, and it cannot be called by anyone —
+        // so it stays out of this set and the reference is reported.
+        preg_match_all('/(?:public|protected)\s+(?:static\s+)?function\s+(\w+)\s*\(/', $source, $found);
+
+        foreach ($found[1] as $method) {
+            $methods[$method] = true;
+        }
+
+        // Constants, and the cases of an enum — `StyleOrder::SelfFirst` is a
+        // case, not a method, and both are things the documentation names.
+        preg_match_all('/\bconst\s+(\w+)/', $source, $consts);
+
+        foreach ($consts[1] as $constant) {
+            $methods[$constant] = true;
+        }
+
+        if (preg_match('/^(?:final\s+)?enum\s+\w+/m', $source) === 1) {
+            preg_match_all('/^\s*case\s+(\w+)/m', $source, $cases);
+
+            foreach ($cases[1] as $case) {
+                $methods[$case] = true;
+            }
+        }
+
+        $apiClasses[$fqcn] = ['file' => $source, 'methods' => $methods];
+        $apiClasses[$cl[1]] ??= ['file' => $source, 'methods' => $methods];
+    }
+}
+
+$skipped = 0;
+
+foreach ($files as $relative) {
+    $lines = file($root . '/' . $relative, FILE_IGNORE_NEW_LINES) ?: [];
+    $struck = false;
+
+    foreach ($lines as $index => $line) {
+        // Fenced code is sample text, not a claim about the API.
+        if (preg_match('/^\s*(```|~~~)/', $line) === 1) {
+            $struck = !$struck;
+
+            continue;
+        }
+
+        if ($struck) {
+            continue;
+        }
+
+        $lower = strtolower($line);
+        $historicalLine = false;
+
+        foreach ($historical as $marker) {
+            if (str_contains($lower, $marker)) {
+                $historicalLine = true;
+
+                break;
+            }
+        }
+
+        // `App::boot()` and `App::boot()`-with-parens are both written in these docs,
+// and the trailing `()` is part of how a person writes a call rather than part
+// of the name, so both forms have to match.
+preg_match_all('/`([A-Za-z_][\w\\\\]*)(?:::(\w+))?(?:\(\))?`/', $line, $refs, PREG_SET_ORDER);
+
+        foreach ($refs as $ref) {
+            $symbol = rtrim($ref[1], '\\');
+            $method = $ref[2] ?? null;
+
+            if ($historicalLine) {
+                $skipped++;
+
+                continue;
+            }
+
+            if ($method !== null) {
+                // A static call. Only ours to check: `PHPUnit\Framework\…::x` and
+                // every other third-party symbol is somebody else's API, and
+                // reporting it would be this tool complaining about Doctrine.
+                if (!isset($apiClasses[$symbol])) {
+                    continue;
+                }
+
+                if (!isset($apiClasses[$symbol]['methods'][$method])) {
+                    $failures[] = [
+                        $relative,
+                        $index + 1,
+                        $symbol . '::' . $method . '()',
+                        'no public or protected member "' . $method . '" on ' . $symbol,
+                    ];
+                }
+
+                continue;
+            }
+
+            // A bare symbol. Only this framework's namespace is ours to check.
+            if (!str_starts_with($symbol, 'Empira\\') || str_starts_with($symbol, 'Empira\\Migrations')) {
+                continue;
+            }
+
+            // A namespace is not a class. `Empira\Auth` appears in a table of
+            // namespaces, and demanding a class by that name would be wrong.
+            if (isset($apiNamespaces[$symbol]) || isset($apiClasses[$symbol])) {
+                continue;
+            }
+
+            $failures[] = [
+                $relative,
+                $index + 1,
+                $symbol,
+                'documented class does not exist — if this is history, say so in the sentence and this check will skip it',
+            ];
+        }
+    }
+}
+
 echo "Documentation links\n";
 
 foreach ($failures as [$file, $line, $target, $why]) {
@@ -308,7 +518,8 @@ foreach ($failures as [$file, $line, $target, $why]) {
 printf("\n  %d relative link(s) checked across %d file(s).\n", $checked, count($files));
 
 if ($failures === []) {
-    echo "  \033[32mok\033[0m    every link resolves and every anchor exists\n";
+    printf("  \033[32mok\033[0m    every link resolves, every anchor exists, every named class and method does\n");
+    printf("        (%d API reference(s) skipped as history)\n", $skipped);
     exit(0);
 }
 
