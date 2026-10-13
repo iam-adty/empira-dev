@@ -24,6 +24,16 @@ final class DebugToolsModule implements Module, CommandProvider
 framework checks those names against its own, so a collision here fails with a
 sensible message rather than whichever command happened to win.
 
+Four classes make up the developer-facing surface, and they are separate on
+purpose:
+
+| Class | Is | Because |
+|---|---|---|
+| `Debug` | the API a developer calls | no `Application` accessor exists to resolve one from |
+| `Marks` | the buffer | the Clockwork request object does not exist while a handler runs |
+| `Span` | the handle | timing what a closure cannot wrap |
+| `Profiler` | the owner | one Clockwork, one storage directory, one set of ids |
+
 ## Commands
 
 ```bash
@@ -164,26 +174,110 @@ exists for. It is safe only because the injection separately requires a `</body>
 names arrive as they were written, and `Content-Type` and `content-type` are the
 same header.
 
-## The bar
+## The header contract
 
-`resources/toolbar.js` and `resources/toolbar.css`, served by two routes that
-**take no parameter**. That is deliberate: `DebugController::asset()` has to
-defend against a path because it is handed one; these two have nothing to defend,
-and adding a `{file}` parameter would be a way to have a traversal bug rather than
-a way to avoid one.
+This package's whole integration with a Clockwork client is three headers, and
+`X-Clockwork-Path` is the one that is easy to get wrong:
 
-Served as files rather than inlined so that an application sending a strict
-`Content-Security-Policy` does not have to permit inline scripts in order to
-debug. The data island is escaped with `JSON_HEX_TAG` for the same reason: a
-route name containing `<` would otherwise close the element it lives in.
+```php
+->withHeader('X-Clockwork-Path', DebugController::API)   // /_clockwork/api
+```
 
-Injected before `</body>`, and skipped for JSON, for htmx requests
-(`Request::isHtmx()` — a swap replaces one region and has no body tag), and for
-fragments with no `</body>` at all.
+A client — the Chrome extension, or Clockwork's own bundle — parses
+`X-Clockwork-Id`, `X-Clockwork-Path` and `X-Clockwork-Version` for
+`{id, path, version}` and then requests **`{path}/{id}`**. Clockwork's own value
+for that path is `/__clockwork/`, and its server answers `/__clockwork/{id}`.
 
-Clockwork's own toolbar is a **separate npm or CDN package**
-(`clockwork-browser`), not part of the Composer package — upstream injects
-nothing into your HTML by design. This module does not pull it in.
+So the header is the **API base**, not the prefix the interface is mounted at.
+Sending `DebugController::PATH` points every client at `/_clockwork/{id}`, a
+route that does not exist, and the application looks perfectly healthy while
+every client 404s. It shipped that way once.
+
+`StorageHistoryTest::testAClientCanGetItsDataFromTheHeadersAlone()` performs the
+journey from the headers alone. It is the test that would catch a regression, and
+it is the reason to not "simplify" that header back to the prefix.
+
+## Clockwork's timeline has three ways to lose your data
+
+Found by reading `Clockwork/Request/Timeline/Event.php`, not by testing. Each
+one fails silently — an event that arrives with no payload and a duration of zero
+looks exactly like an event that had nothing to report.
+
+**`Event` reads exactly five keys** — `name`, `start`, `end`, `color`, `data` —
+and nothing else. A payload passed at the top level is none of those five and is
+**discarded**. Everything this module attaches to an event is nested under
+`'data' =>`. There is no way to have it quietly not work.
+
+**`Timeline::event()` finds-or-creates by name.** `if ($event = $this->find($name)) return $event;`
+Three `Debug::mark('row')` calls produce **one** event, and the other two
+payloads go nowhere. This module's own lifecycle events use `event()` because
+their names are unique per request; everything a developer marks uses
+`create()`.
+
+**`Event::finalize()` clamps to a window it is given:**
+
+```php
+if ($this->start < $start) $this->start = $start;
+if ($this->end > $end) $this->end = $end;
+```
+
+`Clockwork::resolveRequest()` passes `$request->time`, and that object is built
+in `Profiler::record()` — *after* the handler. So anything the application did
+during the request starts before that and would be dragged forward onto the
+instant recording began. `EmpiraDataSource::resolve()` overwrites
+`$request->time` with the request's real start, which is the fix.
+`DebugHelperTest::testMarksSurviveTheTimelineFinalizeClamp()` marks twice with a
+2ms gap and asserts the gap survives, because a clamp to a single instant would
+leave them indistinguishable.
+
+## Storage answers with objects, `false`, and arrays
+
+`Clockwork\Request\Request` is **not** `JsonSerializable`. `toArray()` is the
+shape to serve, and all three of these have to be handled or a client gets a
+subtly wrong document:
+
+| Call | Returns |
+|---|---|
+| `latest()`, `find($id)` | one `Request`, or `false` when there is none |
+| `all()`, `previous()`, `next()` | an **array** of `Request` |
+
+Passing an array straight to `json_encode` encodes each object's public
+properties — which omits every *computed* field, so a paged client would see no
+duration and no query counts for records that have them. `DebugController`
+maps both shapes, and
+`StorageHistoryTest::testPagingEndpointsReturnTheSameShapeAsASingleRequest()`
+compares the field lists so the two cannot drift apart again.
+
+`find()` on an unknown id is a 404 here, not `null`: a 200 with a null body lets
+a client cache "no such request" as though it were data.
+
+## Nothing is injected into a response
+
+This package ships no JavaScript, rewrites no response bodies, and serves no
+HTML. There was an in-page toolbar and a wrapper page; both are gone, and
+`DebugToolsTest::testAPageIsLeftByteForByteAlone()` asserts a page comes back
+exactly as the handler wrote it.
+
+That was a deliberate change, not an omission — upstream takes the same position,
+and its toolbar is a separate npm or CDN component. The cost is worth recording
+anyway: an early wrapper page embedded CSS and JS in a PHP heredoc using `{{`
+and `}}`, which PHP does **not** escape. They went out literally, the CSS was
+invalid, and the JS was a syntax error — a 300×150 iframe and a client with no
+`metadataPath`, from one wrong brace. **PHP heredoc interpolates `$`, `{$…}`
+and `${…}`. Braces are literal.**
+
+## `Debug` is a static on purpose
+
+No global `Application` accessor exists in the framework — `src/functions.php`
+has only `hx()` — so a helper called three layers down has nothing to resolve
+from. The static is safe because PHP is one request per process under a classic
+runtime, and sequential under a worker, so a single slot set at the start of a
+request and cleared in a `finally` cannot be contended.
+
+`Debug::measure()` runs its callback **and returns its value** even when nothing
+is recording. A debugging helper that changed what the application does when
+switched off would be a bug in the tool, and that is the one behaviour here that
+would be easy to "optimise" into a production incident.
 
 ## Definition of done
 
