@@ -258,6 +258,34 @@ bare_skeleton() {
         bad "declares autoload-dev; there is no tests/ directory for it to point at"
     fi
 
+    # The signing secret, on the same reasoning: `app/` now refuses to start
+    # without `APP_SECRET` in `.env`, so a `.env` committed here is not a stray
+    # file but a working production key in a repository anybody can clone.
+    #
+    # `app/.gitignore` lists `/.env`, so this is close to asking whether the
+    # ignore rule still exists — which is the question worth asking. Removing that
+    # one line to "get the app running" is the most likely way this happens, and it
+    # is invisible in a diff among dozens.
+    #
+    # `app-test/` has one committed, deliberately: it is a disposable scratch
+    # application with a fixed throwaway value, and it is not a repository.
+    local env_tracked
+    env_tracked=$(git -C app ls-files --error-unmatch .env 2>/dev/null || true)
+
+    if [ -z "$env_tracked" ]; then
+        ok "commits no .env — the signing secret is not in the repository"
+    else
+        bad "commits .env; APP_SECRET is a production key and .env is gitignored"
+    fi
+
+    # And the ignore rule that keeps it that way, checked for the same reason:
+    # its absence is how the line above gets violated.
+    if grep -qx '/\.env' app/.gitignore 2>/dev/null; then
+        ok "ignores /.env, so the secret cannot be added by accident"
+    else
+        bad "no '/.env' in app/.gitignore; a secret would be one `git add -f` away"
+    fi
+
     # The exact breakage that started this: a script naming a command the
     # application does not have. `composer setup` was the first thing anyone ran on
     # a fresh clone, and it failed every time.

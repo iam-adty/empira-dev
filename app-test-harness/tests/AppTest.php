@@ -31,6 +31,37 @@ use PHPUnit\Framework\TestCase;
 final class AppTest extends TestCase
 {
     /**
+     * The configuration keys a test is allowed to disturb, and the values they
+     * had when the suite started.
+     *
+     * {@see self::$baseline} is read once, lazily, because it has to be
+     * captured before the first test mutates anything — and capturing it in
+     * `setUp()` would capture the previous test's leftovers.
+     */
+    private const CONFIG = ['APP_ENV', 'APP_SECRET'];
+
+    /** @var array<string, string> */
+    private static array $baseline = [];
+
+    /** @var bool */
+    private static bool $captured = false;
+
+    private static function captureBaseline(): void
+    {
+        if (self::$captured) {
+            return;
+        }
+
+        foreach (self::CONFIG as $key) {
+            if (isset($_ENV[$key])) {
+                self::$baseline[$key] = (string) $_ENV[$key];
+            }
+        }
+
+        self::$captured = true;
+    }
+
+    /**
      * One database for the whole class, thrown away afterwards.
      *
      * Per test would be tidier in principle and ruinous in practice: hashing a
@@ -93,13 +124,30 @@ final class AppTest extends TestCase
         self::$database = '';
     }
 
+    protected function setUp(): void
+    {
+        self::captureBaseline();
+    }
+
     protected function tearDown(): void
     {
         if (isset($_SESSION)) {
             $_SESSION = [];
         }
 
-        unset($_ENV['APP_ENV'], $_ENV['APP_SECRET']);
+        // Restored rather than unset. `tests/bootstrap.php` loads the scratch
+        // application's `.env`, so `APP_ENV` and `APP_SECRET` arrive once per
+        // process — and unsetting them here would leave every test after the
+        // first booting with no secret at all, which is now a refusal rather
+        // than a placeholder. A suite whose tests depend on their order is a
+        // suite that reports a failure nobody caused.
+        foreach (self::CONFIG as $key) {
+            if (array_key_exists($key, self::$baseline)) {
+                $_ENV[$key] = self::$baseline[$key];
+            } else {
+                unset($_ENV[$key]);
+            }
+        }
     }
 
     // ------------------------------------------------------------- serving
@@ -293,6 +341,20 @@ final class AppTest extends TestCase
     public function testAUserCanBePersistedThroughTheModulesEntityMapping(): void
     {
         $app = App::boot();
+        $repository = $app->entities()->getRepository(User::class);
+
+        // Cleared first, because the claim being tested is that a user *can* be
+        // persisted through this mapping — not that this address happens to be
+        // free. The scratch application keeps one SQLite file between runs, so
+        // without this the suite was green only on the first run after a
+        // `reset` and failed on every run after it, with a constraint violation
+        // that says nothing about entity mapping.
+        $existing = $repository->findOneBy(['email' => 'skeleton@example.com']);
+
+        if ($existing instanceof User) {
+            $app->entities()->remove($existing);
+            $app->entities()->flush();
+        }
 
         $app->entities()->persist($user = new User('skeleton@example.com', 'Skeleton'));
         $app->entities()->flush();
@@ -357,27 +419,83 @@ final class AppTest extends TestCase
 
     // ------------------------------------------------------------- the secret
 
-    public function testThePlaceholderSecretIsFineWhenNothingSaysOtherwise(): void
+    public function testTheSecretComesFromTheEnvFile(): void
     {
-        self::assertSame(200, App::boot()->handle(new Request('GET', '/'))->status());
+        // The baseline is whatever `.env` supplied, via the suite's bootstrap.
+        self::assertSame(
+            self::$baseline['APP_SECRET'] ?? null,
+            $_ENV['APP_SECRET'] ?? null,
+            'the suite is not running against the application\'s own .env',
+        );
     }
 
-    public function testThePlaceholderSecretRefusesToStartOutsideLocal(): void
+    public function testAnInheritedSecretIsIgnored(): void
     {
-        $_ENV['APP_ENV'] = 'production';
+        // The whole point of the rule. `.env` is the only source, so a value
+        // arriving through the process environment cannot reach the application —
+        // and cannot change what it signs with. A test that sets one and watches
+        // it do nothing is the only evidence that would survive a regression to
+        // the old merge order.
+        $_ENV['APP_SECRET'] = bin2hex(random_bytes(32));
+
+        self::assertSame(200, App::boot()->handle(new Request('GET', '/'))->status());
+
+        // And the application's own value is what a fresh read produces.
+        unset($_ENV['APP_SECRET']);
+        App::loadEnvironment(dirname(__DIR__));
+
+        self::assertSame(self::$baseline['APP_SECRET'] ?? null, $_ENV['APP_SECRET'] ?? null);
+    }
+
+    public function testAMissingSecretRefusesToStart(): void
+    {
+        unset($_ENV['APP_SECRET']);
 
         $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage('Refusing to start with the placeholder APP_SECRET');
+        $this->expectExceptionMessage('APP_SECRET is not set');
 
         App::boot();
     }
 
-    public function testARealSecretIsAcceptedOutsideLocal(): void
+    public function testATooShortSecretRefusesToStartAndSaysHowShort(): void
     {
-        $_ENV['APP_ENV'] = 'production';
-        $_ENV['APP_SECRET'] = bin2hex(random_bytes(32));
+        $_ENV['APP_SECRET'] = 'short';
 
-        self::assertSame(200, App::boot()->handle(new Request('GET', '/'))->status());
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('too short (5 bytes, 16 needed)');
+
+        App::boot();
+    }
+
+    public function testTheRefusalNamesTheFileAndTheCommand(): void
+    {
+        unset($_ENV['APP_SECRET']);
+
+        try {
+            App::boot();
+
+            self::fail('the application booted with no secret at all');
+        } catch (\RuntimeException $e) {
+            // A refusal that does not say what to do next is an obstacle, and
+            // this is the first thing anybody meets who has just cloned the
+            // skeleton.
+            self::assertStringContainsString('.env', $e->getMessage());
+            self::assertStringContainsString('random_bytes(32)', $e->getMessage());
+        }
+    }
+
+    public function testAnEmptySecretIsRefusedRatherThanTreatedAsAbsent(): void
+    {
+        // `.env.example` ships `APP_SECRET=` empty, so an unset key and an empty
+        // one are the two states a fresh copy is actually in, and they must fail
+        // the same way rather than one of them quietly producing a zero-length
+        // key.
+        $_ENV['APP_SECRET'] = '';
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('APP_SECRET is not set');
+
+        App::boot();
     }
 
     // ------------------------------------------------------------- the console

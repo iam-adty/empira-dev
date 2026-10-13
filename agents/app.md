@@ -9,7 +9,7 @@ and serves, and the answer to "how do I wire this up?".
 ## Commands
 
 ```bash
-composer serve                      # every interface, :8000
+composer serve                      # every interface, :8000 (needs a .env — see below)
 vendor/bin/empira migrate           # the schema, before anything serves
 composer validate                   # must stay clean
 ```
@@ -23,11 +23,18 @@ There is no `seed` command, and there is no test suite here either. See
 machine's address as well as `localhost` — deliberate, because the machine is
 often a VM.
 
-That means it is serving `.env.example`'s placeholder `APP_SECRET` to the
-network. `App::boot()` refuses that secret only when `APP_ENV` is `production`,
-and unset counts as local, so the guard does not fire here. Anything that can
-reach the port can mint a signed component URL and fetch any component with any
-props. Use `--host=127.0.0.1` on a network you do not control.
+Anything that can reach the port can mint a signed component URL and fetch any
+component with any props, so whatever secret is in `.env` is exposed to the
+network. Use `--host=127.0.0.1` on a network you do not control.
+
+**There is no `.env` in the repository and there never will be.** It is
+gitignored, `module-contract` checks that it is both untracked and still ignored,
+and `App::boot()` refuses to start without one. A fresh clone needs:
+
+```bash
+cp .env.example .env
+php -r 'echo bin2hex(random_bytes(32)), PHP_EOL;'   # paste into APP_SECRET
+```
 
 ## Layout
 
@@ -277,9 +284,44 @@ cd app && composer update iam-adty/empira-principle iam-adty/empira-auth
   (`empira-frankenphp`) whose `worker.php` calls `respond()` in a loop. If you add
   a loop here, you have re-added a runtime the application does not use.
 
+## Configuration comes from `.env`, and only from `.env`
+
+`App::loadEnvironment()` **discards** the inherited value of every key in
+`App::CONFIG_KEYS` before it reads the file. This is the opposite of the dotenv
+convention, which merges the other way round so a real environment variable wins.
+
+The reason is two answers to one question. With the conventional order, a shell
+that happened to have `APP_ENV=production` exported silently changed what a
+development machine served, and nothing on the page said so. Stripping first
+means a key `.env` does not mention falls through to the application's own
+default rather than inheriting from outside.
+
+Consequences worth knowing before you add a setting:
+
+- **`getenv()` is the wrong way to read configuration here.** Use `$_ENV`.
+  `loadEnvironment()` only ever writes `$_ENV`, and the framework's own
+  `Config\DatabaseConfig` reads `$_ENV` directly — which is why the loader cannot
+  bypass it and hand the file somewhere else.
+- **Injected environment variables do not reach the application.** `docker run
+  -e`, a Kubernetes `envFrom:` Secret, `Environment=` in a unit file, a CI
+  secret — none of them arrive, because the value never lands in `$_ENV`. A
+  deployment supplies a real `.env`, so the secret is on disk and belongs in a
+  file its owner cannot read.
+- **A new setting has to be added to `CONFIG_KEYS`** or it will be read from the
+  process environment without being listed, and the rule will quietly not apply
+  to it.
+- **`EMPIRA_BOOTSTRAP` is not in that list and cannot be.** `Console\Bootstrap`
+  reads it to decide which file to require, so it is consulted before this
+  application has loaded anything at all.
+
+The suite gets its environment from the scratch application's `.env` via
+`tests/bootstrap.php`, so tests see what a served request sees. That file is why
+the missing-secret tests have to arrange a missing secret deliberately rather
+than inheriting one.
+
 ## `APP_SECRET`
 
-`.env.example` ships a **demo placeholder**. Generate your own for anything real:
+Required, with no default. Generate one and put it in `.env`:
 
 ```bash
 php -r 'echo bin2hex(random_bytes(32)), PHP_EOL;'
@@ -288,8 +330,8 @@ php -r 'echo bin2hex(random_bytes(32)), PHP_EOL;'
 It must be at least 16 bytes, and must not change between deploys — changing it
 invalidates every component link already in a user's history.
 
-`App::boot()` **refuses to start** on the placeholder unless the environment is
-local. The failure this guards against is silent, which is why it is a boot check
+`App::boot()` refuses to start without one, in **every** environment. The
+failure this guards against is silent, which is why it is a boot check
 rather than a log line: a component token is
 `base64url(payload).base64url(hmac)` and the payload carries the component class
 and its props, so with the secret in the open anyone can mint a signed URL for

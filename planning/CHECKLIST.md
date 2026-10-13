@@ -535,6 +535,54 @@ placeholder `APP_SECRET` outside a local environment. Unset is the off case, and
 it is the one that matters: it is what an application that never heard of this
 module looks like.
 
+### 13. `.env` is the only source, and the secret has no default — 2026-10-13
+
+Both about the same line: `App` stopped guessing its own configuration.
+
+- ~~`App::SECRET` deleted~~ — it was public in three places (the source,
+  `.env.example`, every clone on GitHub), so "change it before deploying" was a
+  step every deployment had to remember. A fallback secret is a public constant
+  with extra steps.
+- ~~The placeholder guard is gone, not moved~~ — it fired only when `APP_ENV`
+  was set to `production`, and unset counted as local, so setting neither served
+  forgeable component URLs on every interface `composer serve` binds. The check
+  depended on the other setting being right. `secret()` now requires
+  `APP_SECRET` at ≥16 bytes **in every environment**, and distinguishes *not set*
+  from *too short (N bytes)* because those are the two states a fresh copy of
+  `.env.example` is actually in.
+- ~~`loadEnvironment()` discards inherited values first~~ — the dotenv convention
+  merges the other way, so an exported `APP_ENV` silently changed what a
+  development machine served. Stripping `App::CONFIG_KEYS` before the merge means
+  a key the file omits falls through to the application's own default rather than
+  inheriting from outside.
+- ~~`isLocal()` deleted~~ — it existed only to police the placeholder. `APP_ENV`
+  now has **no reader in `app/`**; it is a convention consumed by modules that
+  ask whether this is a development environment, `empira-debug-tools` among them.
+- ~~`EMPIRA_BOOTSTRAP` is not in `CONFIG_KEYS`~~ — `Console\Bootstrap::locate()`
+  reads it to decide which file to require, so it is consulted before the
+  application has loaded anything. It cannot be file-sourced.
+- ~~`module-contract` checks `app/` commits no `.env`~~ — and that `/.env` is
+  still in its `.gitignore`. The ignore rule's absence is how a secret gets
+  added, and that is invisible in a diff among dozens.
+- ~~The suite's `tearDown` restores instead of unsetting~~ — `tests/bootstrap.php`
+  loads the scratch application's `.env` once per process, so unsetting
+  `APP_SECRET` in `tearDown` left every later test booting with none, which is
+  now a refusal. A suite whose tests depend on their order reports failures
+  nobody caused.
+
+**The cost, stated once:** injected environment variables no longer reach the
+application. `docker run -e`, Kubernetes `envFrom:`, systemd `Environment=` and CI
+secrets are all ignored, because the value never arrives in `$_ENV`. A deployment
+supplies a real `.env` instead — so the secret is on disk, in a file that belongs
+to be mode `0600` and is never baked into an image layer. A fresh clone needs one
+extra step before `composer serve`.
+
+Found along the way, in the harness rather than in the plan:
+`testAUserCanBePersistedThroughTheModulesEntityMapping` persisted a fixed address
+unconditionally, so the suite was green only on the first run after a `reset` and
+failed on every run after with a constraint violation that said nothing about
+entity mapping. It clears the row first now.
+
 ---
 
 ## Deferred

@@ -90,6 +90,14 @@ request leaves the list one entry longer each time — invisible for a single
 request, unbounded under a worker. The source is registered once, in the
 `Profiler` constructor, and reused.
 
+**`$_ENV` only — never `getenv()`.** This module read `getenv()` as a second
+source for `APP_ENV`, and it was the only `getenv()` in the workspace. The
+application strips its inherited configuration before reading `.env`
+(`App::CONFIG_KEYS`), so anything arriving through the process environment is a
+value the application never saw. A profiler deciding whether to write every
+request to disk should decide on the application's answer, not a second one
+gathered behind its back.
+
 **There is one data source, and it is shared.** `EmpiraDataSource` looks
 per-request, since it holds the request in hand, and binding a fresh one per
 request in the container is the obvious thing to do — but the middleware writes
@@ -127,6 +135,55 @@ re-throwing is the whole contract: a profiler that skips exactly the requests yo
 wanted to debug is worse than no profiler. No headers are added on that path —
 there is no response to add them to yet, and the application's error renderer
 runs outside this pipeline and does not know this module exists.
+
+**`Clockwork\Request\Request::$time` is set when the object is constructed, and
+that is not when the request began.** `Profiler::record()` builds the object after
+the handler has already run, so leaving `responseDuration` to Clockwork's
+`getResponseDuration()` measures the recording rather than the request — a
+five-millisecond handler is reported as taking the time it takes to serialise
+itself. `EmpiraDataSource` sets `responseDuration` explicitly, from the clock
+`begin()` started. It is **already in milliseconds**; converting again reports a
+thousandfold. `tests/DebugToolsTest.php` sleeps 2ms in the handler on purpose: an
+instant closure reports 0.0ms whether this is right or wrong, so a test without
+the sleep passes against the bug.
+
+**The bar's numbers travel in the page, not in a cookie.** `Response::cookie()`
+*replaces* the `Set-Cookie` header rather than appending, so a bar setting a
+cookie from the outermost middleware would silently overwrite whatever cookie the
+application set while dispatching — and only on pages being debugged, which is
+the worst time to discover it. A `script type="application/json"` island costs one
+element and cannot collide.
+
+**An absent `Content-Type` means HTML, here.** The framework sets none: both a
+layout-rendered page and a handler returning a string come back with the header
+unset. Requiring `text/html` would mean the bar never appeared on the pages it
+exists for. It is safe only because the injection separately requires a `</body>`
+— JSON has none — so the two checks together are stricter than either.
+
+**`Response::headers()` is checked with `strcasecmp`, not an array key.** Header
+names arrive as they were written, and `Content-Type` and `content-type` are the
+same header.
+
+## The bar
+
+`resources/toolbar.js` and `resources/toolbar.css`, served by two routes that
+**take no parameter**. That is deliberate: `DebugController::asset()` has to
+defend against a path because it is handed one; these two have nothing to defend,
+and adding a `{file}` parameter would be a way to have a traversal bug rather than
+a way to avoid one.
+
+Served as files rather than inlined so that an application sending a strict
+`Content-Security-Policy` does not have to permit inline scripts in order to
+debug. The data island is escaped with `JSON_HEX_TAG` for the same reason: a
+route name containing `<` would otherwise close the element it lives in.
+
+Injected before `</body>`, and skipped for JSON, for htmx requests
+(`Request::isHtmx()` — a swap replaces one region and has no body tag), and for
+fragments with no `</body>` at all.
+
+Clockwork's own toolbar is a **separate npm or CDN package**
+(`clockwork-browser`), not part of the Composer package — upstream injects
+nothing into your HTML by design. This module does not pull it in.
 
 ## Definition of done
 
