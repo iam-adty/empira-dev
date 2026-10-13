@@ -64,12 +64,20 @@ side by side — and is a 404 for anyone holding one. A plain existence check
 passes that class forever.
 
 It also checks the **classes and methods the prose names**, which is what caught
-`App::bootLock()` in a shipped page and `Empira\Data\Connection` in the
-framework's own README — both read correctly, both were gone. Public and
-protected members both count, because documenting a method you are meant to
-override is the documented path rather than an error. Sentences describing
-history are skipped, so the framework's deleted `Grammar` layer stays nameable
-without the tool asking you to erase the reason it was deleted.
+three defects that read perfectly and were gone. In a fenced block, because
+`check-links` would otherwise report each of these as missing — which is exactly
+what they are, and why they are written here:
+
+```
+App::bootLock()                      never existed; it advised putting migrations in boot
+Empira\Data\Connection               deleted when src/Data/ went to Doctrine
+Application::errorResponse()         exists, and is private
+```
+
+Public and protected members both count, because documenting a method you are
+meant to override is the documented path rather than an error. Sentences
+describing history are skipped, so the framework's deleted `Grammar` layer stays
+nameable without the tool asking you to erase the reason it was deleted.
 
 `check-readme-installs` costs ~3 minutes cold and ~0.04s warm. Composer resolves a
 `https://github.com/…` VCS repository through the **GitHub API** rather than
