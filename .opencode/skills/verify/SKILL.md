@@ -69,7 +69,7 @@ passes that class forever.
 cd principle && composer test
 ```
 
-`473 tests, 1071 assertions` is the current baseline. **If your change adds or
+`485 tests, 1087 assertions` is the current baseline. **If your change adds or
 removes tests, update that number in every document that quotes it** —
 `dev/agents/principle.md`, `dev/planning/CHECKLIST.md`, `principle/ARCHITECTURE.md`, `principle/docs/testing.md`.
 

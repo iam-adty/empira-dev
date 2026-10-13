@@ -5,7 +5,7 @@
 > a bug.
 
 Framework: `iam-adty/empira-principle` · app: `iam-adty/empira-app`
-Current: **473 framework tests / 1071 assertions**, **37 auth tests / 71 assertions**, **14 frankenphp tests / 24 assertions**, **17 app-test tests / 31 assertions** (in the generated `app-test/`, not in `app/`).
+Current: **485 framework tests / 1087 assertions**, **37 auth tests / 71 assertions**, **14 frankenphp tests / 24 assertions**, **17 app-test tests / 31 assertions** (in the generated `app-test/`, not in `app/`).
 
 ---
 
@@ -415,6 +415,40 @@ were invisible until it was executed, which is the argument for the check existi
 - **One consequence, stated rather than hidden:** because the suite is generated
   from a clone, a change to `app/` is uncovered until it is pushed and
   `app-test/` rebuilt.
+
+### 10. The console is framework core — 2026-10-13
+
+`empira` was already core — five built-ins, a registered `bin`, project commands
+reached through `bootstrap/app.php`. What it could not do was the thing a
+framework is supposed to make easy: a package shipping its own command.
+
+- ~~`Console\CommandProvider`~~ — opt-in, collected by `Application::module()`
+  beside migrations, for the reason `MigrationSource` is: an interface every
+  module must implement only to return `[]` teaches nothing.
+- ~~`Application::discoverCommands()`~~ — a class under `app/Console/` declaring
+  a name is a command, as in Laravel. The name comes from `Command::name()`, not
+  the filename; commands are built by the container so one may ask for what it
+  needs.
+- ~~`ClassScanner`~~ — route and command discovery are the same question asked
+  twice, so the scanner moved out of `RouteRegistry` rather than being copied.
+- ~~`App::boot()` / `App::bootConsole()`~~ — one private `build()`, two named
+  entry points. `boot()` served web through a `bool $csrf` whose only caller
+  passing `false` was the console bootstrap.
+- ~~**Discovery lives in `bootstrap/app.php`, not in `App::boot()`.**~~ Building
+  an application knows nothing about what it exposes on a command line. The
+  skeleton ships `src/Console/` with nothing in it — visible, and empty on
+  purpose.
+- ~~The scratch application's harness shrank~~ — a skeleton that discovers its
+  own commands has no reason to ship a harness that registers them, so
+  `bootstrap/harness.php` and a second copy of `bootstrap/app.php` were deleted.
+- **Module migrations were deliberately left alone.** Copying them into the
+  application's `migrations/` was considered and rejected: a copy must rewrite the
+  namespace, can collide on a version string two sources could never collide on,
+  and orphans a migration nobody can attribute when a module drops one. The
+  existing mechanism — one planned sequence across every source, one version
+  ledger — is correct and covered by `testTheModuleContributesItsMigrations`,
+  `testTheMigrationNamespaceMatchesTheFilesThatDeclareIt` and the scratch app's
+  `testTheModuleBroughtItsTableWithIt`.
 
 ---
 

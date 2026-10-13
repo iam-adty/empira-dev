@@ -45,5 +45,5 @@
     "require-dev": {
         "phpunit/phpunit": "^10.5"
     },
-    "//harness": "This manifest REPLACES app/composer.json wholesale — dev/tools/app-test copies it over the clone rather than merging the two, so the skeleton has one manifest and the scratch app has this one. Nothing keeps them in step: when app/composer.json changes a shared dependency, change it here too, or the scratch app quietly tests an install nobody ships. The `seed` script it adds works here because bootstrap/harness.php registers the command, which is exactly what could not have happened in the skeleton — where the broken `@seed` script used to sit."
+    "//harness": "This manifest REPLACES app/composer.json wholesale — dev/tools/app-test copies it over the clone rather than merging the two, so the skeleton has one manifest and the scratch app has this one. Nothing keeps them in step: when app/composer.json changes a shared dependency, change it here too, or the scratch app quietly tests an install nobody ships. The `seed` script works here because src/Console/SeedCommand.php sits where the skeleton's own bootstrap discovers commands — which is exactly what could not have happened in the skeleton, where the broken `@seed` script used to sit."
 }

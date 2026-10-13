@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App;
+namespace App\Console;
 
 use Empira\Application;
 use Empira\Auth\DoctrineUserProvider;
@@ -22,24 +22,23 @@ use Empira\Console\Output;
  * a demo user in it is a decision they inherit without asking; it used to ship a
  * `composer seed` that pointed at nothing while its own test suite asserted the
  * application registered no commands at all. So the command lives in the harness,
- * which `dev/tools/app-test` throws away and rebuilds, where being wrong costs one
- * command.
+ * which `dev/tools/app-test reset` throws away and rebuilds, where being wrong
+ * costs one command.
  *
- * ## Why it lives in `src/` and not in `bootstrap/harness.php`
+ * ## How it gets registered
  *
- * Because `bootstrap/app.php` is re-required, not autoloaded.
- * `Console\Bootstrap::boot()` says `$booted = require $file`, and the suite runs
- * several console commands in one PHP process — so that file is included seven
- * times over a run, and anything it includes is included with it. A class declared
- * at file scope therefore gets declared seven times, and PHP fatals on the second:
+ * By being here. The skeleton's `bootstrap/app.php` calls `discoverCommands()` on
+ * `src/Console`, and this is the only class in it.
  *
- *     Cannot declare class SeedCommand, because the name is already in use
- *
- * The skeleton's own bootstrap survives this by declaring nothing. An autoloaded
- * file is required exactly once no matter how many times anything reaches for it,
- * which is the only reason this command can live in a project whose entry point is
- * an `include`. **If this is ever moved back into the bootstrap path, it breaks on
- * the second command rather than on the first test.**
+ * It used to be registered by hand, from a `bootstrap/harness.php` that had to be
+ * applied by a second copy of the skeleton's bootstrap. That arrangement had a
+ * sharp edge worth recording: `Console\Bootstrap::boot()` `require`s
+ * `bootstrap/app.php`, and `require` is not `require_once`, so that file was
+ * included seven times over a suite run — and the class declared beside it was
+ * declared seven times too. PHP fatals on the second. The class was moved into an
+ * autoloaded `src/Console/` to fix it, and then the whole arrangement was
+ * deleted, because a skeleton that discovers its own commands has no reason to
+ * ship a harness that registers them.
  */
 final class SeedCommand implements Command
 {

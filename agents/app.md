@@ -88,7 +88,7 @@ a page, and a layout.
 
 The trade is real and worth stating: **this app no longer demonstrates what the
 framework can do.** The auth module's own suite demonstrates authentication; the
-framework's 473 tests demonstrate components, routing, regions, sessions, CSRF
+framework's 485 tests demonstrate components, routing, regions, sessions, CSRF
 and the ORM. If you want a worked example of a feature end to end, read that
 package's tests rather than looking for it here.
 
@@ -160,20 +160,24 @@ reachable is the wrong default to ship in a file somebody copies.** There is no
 `docker/entrypoint.sh` to add one back to either — the runtime is stock nginx and
 php-fpm with no image to build.
 
-The one that does exist is [`app-test/src/SeedCommand.php`](../../dev/app-test-harness/src/SeedCommand.php),
-in the generated scratch app, registered from its `bootstrap/harness.php`. That is
+The one that does exist is [`app-test/src/Console/SeedCommand.php`](../../dev/app-test-harness/src/Console/SeedCommand.php),
+in the generated scratch app, discovered from its own `src/Console/`. That is
 where a seeder belongs in this workspace: **outside the thing that ships.**
 
-If you add one to a real application, register it at boot the same way — but in
-your own bootstrap, not inside `App::boot()`, so that `App.php` stays a readable
-wiring file rather than a place commands accumulate:
+If you add one to a real application, write it under `src/Console/` — it is a
+command by being there, with no line to add anywhere else:
 
 ```php
-// bootstrap/app.php
-$app = App::boot(csrf: false);
-$app->command('seed', new Seed($app->entities()));
+// src/Console/Seed.php
+namespace App\Console;
 
-return $app;
+final class Seed implements Command
+{
+    public function __construct(private readonly Application $app) {}
+
+    public function name(): string { return 'seed'; }
+    // …
+}
 ```
 
 Make it idempotent — a deploy step is allowed to be run twice, because a retried

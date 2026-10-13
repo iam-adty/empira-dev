@@ -106,7 +106,7 @@ narrower contract — `Security\Identity` and `Security\Guard` exist because
 
 ```bash
 # the framework — needs Docker, for PostgreSQL
-cd principle && composer test          # 473 tests
+cd principle && composer test          # 485 tests
 
 # the auth module — no Docker, SQLite
 cd auth && composer test               # 37 tests
@@ -202,7 +202,7 @@ slower than never having it.
 
 **The trade is real:** the app no longer demonstrates what the framework can do.
 Authentication is demonstrated by `auth/`'s 37 tests, components and routing by
-the framework's 473. If you are looking for a worked example of a feature, look
+the framework's 485. If you are looking for a worked example of a feature, look
 there rather than in the app.
 
 ## Cross-repository status
