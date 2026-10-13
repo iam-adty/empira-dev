@@ -73,8 +73,8 @@ contract end to end.
 ```bash
 cd auth && composer test          # 37 tests, 71 assertions
 cd auth && composer validate      # must be clean
-cd app  && composer test          # 15 tests, 26 assertions
-cd app  && composer validate      # must be clean
+cd app  && composer validate      # must be clean — app/ has no suite of its own
+dev/tools/app-test check          # 20 tests, 41 assertions — the generated app-test/
 ```
 
 A change to `principle/src/Security/` or to the module contract is not finished
@@ -249,7 +249,8 @@ produce.**
 ```bash
 cd principle && composer test
 cd auth && composer test
-cd app && composer test && composer validate
+dev/tools/app-test check
+cd app && composer validate
 find src tests -name '*.php' -print0 | xargs -0 -n1 php -l
 ls -A ../tmp          # nothing but .boot.lock
 git status            # nothing unexpected, no vendor

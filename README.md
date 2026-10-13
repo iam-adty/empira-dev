@@ -112,7 +112,8 @@ degradation is only safe if it is known to be one.
 ```bash
 cd principle && composer test    # 473 tests, in Docker against PostgreSQL
 cd auth      && composer test    # 37 tests, SQLite
-cd app       && composer test    # 15 tests, SQLite
+cd frankenphp && composer test   # 14 tests, SQLite
+dev/tools/app-test check         # 20 tests, in the generated app-test/
 ```
 
 `dev/` has no build and no test suite. It holds instructions about the code, not

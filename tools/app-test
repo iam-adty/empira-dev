@@ -1,0 +1,101 @@
+#!/usr/bin/env bash
+#
+# Build the scratch application at ../app-test, from app/ and the harness.
+#
+#     dev/tools/app-test create   # build it, refusing if it already exists
+#     dev/tools/app-test reset    # throw it away and build it again
+#     dev/tools/app-test check    # run its suite
+#     dev/tools/app-test serve    # http://localhost:8001
+#
+# ## Why this exists
+#
+# `app/` ships. It is the skeleton a consumer copies, and anything that grows in
+# it — a demo page, a seeder, a test that assumes a particular feature — is a
+# thing they inherit without asking. So it stays bare, and everything that needs
+# to *do* something lives here, in a directory that is deleted and rebuilt.
+#
+# ## Why it is built from the GitHub clone
+#
+# Not from the working tree. This is the only check that `app/` is actually
+# installable by someone who has only what is published — and `create` uses the
+# README's own `composer update` path, so a regression in the documented install
+# instructions shows up here rather than in a stranger's terminal.
+#
+# ## Why there is no git repository in it
+#
+# It is disposable by construction, and history of something you delete daily is
+# noise that has to be reasoned about. Run `git init` in it if you want to diff
+# your changes before a reset.
+
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+TARGET="$ROOT/app-test"
+HARNESS="$ROOT/dev/app-test-harness"
+# Overridable so the harness can be exercised against a local checkout before it
+# is trusted to the remote — which is the only way to test a change here without
+# pushing `app` to find out whether it worked.
+APP_REPO="${APP_REPO:-git@github.com:iam-adty/empira-app.git}"
+
+say() { printf '\033[1m%s\033[0m %s\n' 'app-test' "$*"; }
+die() { printf '\033[31merror\033[0m %s\n' "$*" >&2; exit 1; }
+
+usage() {
+    sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//' | sed '1d'
+    exit "${1:-0}"
+}
+
+build() {
+    [ -d "$HARNESS" ] || die "harness missing at $HARNESS"
+
+    say "cloning $APP_REPO"
+    git clone -q --depth 1 "$APP_REPO" "$TARGET"
+
+    # The clone carries app/'s committed files — and app/'s own `.git`, which has
+    # to go. app-test is disposable by construction: it is a consumer's checkout
+    # of the skeleton, not another node in this project's history.
+    rm -rf "$TARGET/.git"
+
+    # `vendor/`, `storage/*.sqlite` and any test cache are gitignored there, so
+    # what arrives is the shipped package and nothing else.
+    say "overlaying the harness"
+    cp -R "$HARNESS"/. "$TARGET"/
+
+    # `composer.json` comes from the harness rather than the clone, so the scratch
+    # app's manifest is regenerated from the skeleton's on every build. If the two
+    # ever disagree about a shared dependency this is where it shows. A full
+    # `update` rather than `update iam-adty/*`, because the manifest now requires
+    # phpunit too and the clone's lock has never seen it.
+    say "installing"
+    (
+        cd "$TARGET"
+        composer update --no-interaction --no-progress >/dev/null
+    ) || die "composer update failed — see the output above"
+
+    say "ready: $TARGET"
+    say "    composer test          # the suite"
+    say "    composer seed          # create the demo user"
+    say "    composer serve         # http://localhost:8001"
+}
+
+case "${1:-}" in
+    create)
+        [ -e "$TARGET" ] && die "$TARGET already exists — use 'reset' to replace it"
+        build
+        ;;
+    reset)
+        say "removing $TARGET"
+        rm -rf "$TARGET"
+        build
+        ;;
+    check)
+        [ -d "$TARGET" ] || die "no $TARGET — run 'dev/tools/app-test create' first"
+        cd "$TARGET" && composer test
+        ;;
+    serve)
+        [ -d "$TARGET" ] || die "no $TARGET — run 'dev/tools/app-test create' first"
+        cd "$TARGET" && composer serve
+        ;;
+    -h|--help|help|'') usage 0 ;;
+    *) printf 'unknown command: %s\n\n' "$1" >&2; usage 1 ;;
+esac

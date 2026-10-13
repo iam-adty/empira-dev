@@ -111,8 +111,11 @@ cd principle && composer test          # 473 tests
 # the auth module — no Docker, SQLite
 cd auth && composer test               # 37 tests
 
-# the application — no Docker
-cd app && composer test                # 15 tests
+# worker mode — no Docker, SQLite
+cd frankenphp && composer test         # 14 tests
+
+# the application — no Docker, SQLite, and not in app/:
+dev/tools/app-test check               # 20 tests, in the generated app-test/
 ```
 
 Scratch files belong in the workspace `tmp/`, never `/tmp`. It sits above all
