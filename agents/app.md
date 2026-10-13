@@ -27,11 +27,12 @@ app/
 ├── docker-compose.yml nginx + php-fpm + PostgreSQL, no image build
 ├── docker/nginx.conf  bind-mounted into stock nginx
 ├── migrations/        empty, on purpose — see the .gitkeep
-├── bootstrap/app.php  what `bin/empira` boots
+├── bootstrap/app.php  the console entry `vendor/bin/empira` boots
 ├── bootstrap/modules.php  what this application is made of
 ├── public/index.php   front controller, classic runtimes only
 └── src/
     ├── App.php        all the wiring, in one readable method
+    ├── Console/       empty, on purpose — see the .gitkeep
     ├── Layouts/       SiteLayout — the document and its regions
     └── Pages/         HomeLayout — the one page
 ```
@@ -270,6 +271,13 @@ failing with a bare `COPY failed`.
   and that is deliberate: a boot that migrates has every worker racing through the
   same migration. The `php` service migrates once, before php-fpm starts.
   Do not move either back into boot.
+- **`boot()` and `bootConsole()` are the same application, and the only difference
+  is CSRF.** Both delegate to one private `build()`, so a command sees the same
+  modules, ORM and routes the web does — which `empira migrate` depends on, since
+  a console that saw less would plan a schema missing every table a module owns.
+  If you add a console-only concern, add it in `bootstrap/app.php` rather than
+  branching inside `build()`; that file is the console's entry and the only place
+  that should know a command line exists.
 - **The `SessionGuard` must be built from `$app->session()`** — the application's
   own session, the one everything else writes to. A guard holding a session of
   its own reads a store nobody writes, and every sign-in fails as "wrong

@@ -95,7 +95,10 @@ Shipped with `tests/RouteDiscoveryTest.php`. The reference `app/` moved in the s
 
 `renderException()` used to produce a plain-text body or an HTML view. There was no JSON error shape, and `Request` did not look at `Accept` at all, so a non-browser client got HTML.
 
-Shipped as `Request::accepts()`, `Http\Format`, and `Application::errorResponse()`, with coverage in `tests/NegotiationTest.php`.
+Shipped as `Request::accepts()`, `Http\Format`, and the negotiated error body behind
+`Application::renderException()` — with coverage in `tests/NegotiationTest.php`.
+(The body-shaping method, `errorResponse()`, is private; it was named here as if
+it were the surface, which sent a reader looking for a method they could not call.)
 
 ### Negotiated, not declared
 
