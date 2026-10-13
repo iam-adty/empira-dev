@@ -201,7 +201,7 @@ header at all**, so a wildcard resolves to HTML. Verified against
   package, which is what lets one set of agent guidance cover all five without
   being copied between them.
 
-### 5. Classic runtime and worker mode — shipped 2026-10-12, **one item unfinished**
+### 5. Classic runtime and worker mode — shipped 2026-10-12
 
 The reference application no longer builds an image. It runs on stock
 `nginx:alpine` and `php:8.4-fpm-alpine` with the workspace bind-mounted, so an
@@ -428,12 +428,16 @@ were invisible until it was executed, which is the argument for the check existi
   ambient credential, plus a per-route `#[Route(csrf: false)]`. A
   session-authenticated POST with no token is still refused, and a test fails
   if that ever changes.
-- **Explicit session write-back `[planned]`** — `handle()` opens the session and
-  never closes it, so the save is FrankenPHP's per-request teardown rather than
-  ours. Verified working, and resting on undocumented runtime behaviour our own
-  `beginRequest()` contradicts. At 2 × CPU a deferred write-back would lose a
-  sign-in 31 times in 32. Design, evidence and the fix:
-  [SPEC.md §4](SPEC.md#4-explicit-session-write-back-planned).
+- ~~Explicit session write-back~~ — **shipped 2026-10-13.** `handle()` opened the
+  session and never closed it, so the save was FrankenPHP's per-request teardown
+  rather than ours. Verified working, and resting on undocumented runtime
+  behaviour our own `beginRequest()` contradicts. At 2 × CPU a deferred
+  write-back would lose a sign-in 31 times in 32. It is now `Session::endRequest()`
+  in the `finally` that clears the context — symmetry with `beginRequest()`, and
+  the lock and the write-back both belong to the request rather than to whichever
+  request this worker serves next. Two tests in `WorkerTest.php`, both failing
+  without the change. Design, evidence and the reasoning:
+  [SPEC.md §4](SPEC.md#4-explicit-session-write-back-shipped).
 - **Session isolation is only probabilistically checked at the default.** The
   stack ships 2 × CPU workers, and `verify` no longer pins one, so a per-worker
   state leak surfaces only when two consecutive requests for one session land on
