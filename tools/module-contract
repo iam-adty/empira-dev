@@ -10,7 +10,7 @@
 # package that must not reach outward. A test inside the framework that read
 # `../auth/composer.json` would be the inward dependency `docs/modules.md` argues
 # against, wearing a test's clothes — and it would fail in every lone clone of the
-# framework, which is most of the time. `dev` already knows about all five
+# framework, which is most of the time. `dev` already knows about all six
 # repositories, so the rule is checked from the one place that is allowed to know.
 #
 # ## What it checks
@@ -195,6 +195,7 @@ echo "Package roles"
 check principle framework library
 check auth      module    library
 check frankenphp module   library
+check debugtools module  library
 check app       application project
 
 # The skeleton ships no test suite. This is the one rule here that protects a

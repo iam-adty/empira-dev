@@ -8,10 +8,12 @@ dev/
 ├── README.md              this file
 ├── opencode.json          agent config: instructions + permissions
 ├── .opencode/skills/      add-component, add-route, debug-htmx, verify
-├── agents/                the four AGENTS.md files
+├── agents/                the five AGENTS.md files
 │   ├── workspace.md       ← was ../AGENTS.md      (now a real file at the root)
 │   ├── principle.md       ← was principle/AGENTS.md
 │   ├── auth.md            ← was auth/AGENTS.md
+│   ├── frankenphp.md      ← was frankenphp/AGENTS.md
+│   ├── debugtools.md      ← was debugtools/AGENTS.md
 │   └── app.md             ← was app/AGENTS.md
 ├── planning/
 │   ├── CHECKLIST.md       ← principle/CHECKLIST.md
@@ -21,7 +23,7 @@ dev/
 
 ## Why this exists
 
-It used to be scattered: `AGENTS.md` in three packages and the workspace,
+It used to be scattered: `AGENTS.md` in each package and the workspace,
 `opencode.json` and four agent skills inside `principle/`, the checklist and the
 spec beside them, and an orphaned `ideas/component.php` at the root that no
 repository tracked and nothing referenced.
@@ -74,8 +76,8 @@ cd principle && opencode debug skill     # all four skills, from dev/
 
 | Session started in | Instructions | Skills |
 |---|---|---|
-| `principle/` `auth/` `app/` | that package's agent file + its docs | all four |
-| `dev/` | all four agent files + the framework's docs | all four |
+| `principle/` `auth/` `frankenphp/` `debugtools/` `app/` | that package's agent file + its docs | all four |
+| `dev/` | all five agent files + the framework's docs | all four |
 | the workspace root | this directory's `AGENTS.md`, as a pointer | none |
 
 The last row is deliberate. There is no root `opencode.json`, because the root is
@@ -98,7 +100,7 @@ degradation is only safe if it is known to be one.
   by saying the code wins.
 
 - **`git checkout` in a package will not restore its `AGENTS.md`.** Those files
-  are gone from the three repositories, and the workspace root is covered by no
+  are gone from every package repository, and the workspace root is covered by no
   repository at all. `dev/` is the only history they have.
 
 - **Published documents link here over the network, not by path.** `principle`

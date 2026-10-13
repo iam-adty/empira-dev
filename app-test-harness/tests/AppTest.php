@@ -9,6 +9,7 @@ use Empira\Auth\Auth;
 use Empira\Auth\AuthModule;
 use Empira\Auth\User;
 use Empira\Console;
+use Empira\DebugTools\DebugToolsModule;
 use Empira\Http\Request;
 use Empira\Module;
 use PHPUnit\Framework\TestCase;
@@ -167,11 +168,58 @@ final class AppTest extends TestCase
      */
     public function testTheAuthModuleIsInstalledAtBoot(): void
     {
-        $app = App::boot();
+        // Unset, for the same reason as the command contract in BootContractTest:
+        // the registry is the harness's, and what it installs depends on the
+        // environment. Unset is the case that says "the skeleton, alone" — and
+        // `production` would not boot, because the skeleton refuses a
+        // placeholder APP_SECRET outside a local environment.
+        unset($_ENV['APP_ENV']);
 
-        self::assertCount(1, $app->modules());
-        self::assertInstanceOf(AuthModule::class, $app->modules()[0]);
-        self::assertCount(1, $app->guards(), 'the module registered no guard');
+        try {
+            $app = App::boot();
+
+            // Two, not one: the harness overlay also installs the profiler, in
+            // every environment. The assertion is about which module is there,
+            // and an exact count of one would have been asserting that the
+            // overlay was empty.
+            self::assertCount(2, $app->modules());
+            self::assertInstanceOf(AuthModule::class, $app->modules()[0]);
+            self::assertCount(1, $app->guards(), 'the module registered no guard');
+        } finally {
+            unset($_ENV['APP_ENV']);
+        }
+    }
+
+    /**
+     * A module that decides to do nothing still counts as installed.
+     *
+     * The profiler registers its routes and its commands only in a development
+     * environment, and this is the assertion that it is *in* the application
+     * either way — the list of what an application is made of should not depend
+     * on which environment you are asking in. A module that removed itself when
+     * switched off would be a module whose installation nobody could verify.
+     */
+    public function testTheProfilerIsInstalledWhetherOrNotItIsRunning(): void
+    {
+        // `null` is unset rather than a name: it is the default an application
+        // that never configured an environment boots under.
+        foreach ([null, 'local'] as $env) {
+            if ($env === null) {
+                unset($_ENV['APP_ENV']);
+            } else {
+                $_ENV['APP_ENV'] = $env;
+            }
+
+            try {
+                $app = App::boot();
+                $label = $env ?? '(unset)';
+
+                self::assertCount(2, $app->modules(), "expected the profiler to be installed under APP_ENV={$label}");
+                self::assertInstanceOf(DebugToolsModule::class, $app->modules()[1]);
+            } finally {
+                unset($_ENV['APP_ENV']);
+            }
+        }
     }
 
     /**

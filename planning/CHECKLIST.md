@@ -482,6 +482,59 @@ and queries it, Migrations plans against it.
   container that no longer existed. That coverage now lives in
   `principle/tests/{ActionTest,TokenCodecTest,WorkerTest}` and `auth/tests`.
 
+### 12. Request profiling is a module — 2026-10-13
+
+`empira-debug-tools` ships as a sixth repository, wrapping
+[Clockwork](https://github.com/itsgoingd/clockwork) rather than reimplementing
+it. The framework names none of its classes and knows it exists.
+
+- ~~A middleware, not a hook~~ — a profile is only complete once the response
+  exists. A request that has not been answered has no status, no duration, and
+  nothing to show the person debugging it, so the clock starts on the way in and
+  the response is read on the way out. `Application::use()` is the seam; it
+  already existed and rebuilds each layer per request, which is what keeps a
+  source from carrying one request's objects into the next.
+- ~~Nothing registered outside a development environment~~ — `APP_ENV` in
+  `local`/`dev`/`development`/`test`. The decision governs **whether the routes
+  exist**, not what they answer: in production there is no URL to probe and no
+  directory to serve, rather than a URL that is present and refuses. Read from
+  `$_ENV` first, like every other package here, with `getenv()` behind it — a
+  profiler reaching a different answer about the environment than the application
+  it profiles would be worse than one that never asked.
+- ~~Payloads and cookies are not collected~~ — they are credentials, and this
+  module writes request data to disk and serves that disk back over HTTP. Opt-in
+  per instance, never a framework switch.
+- ~~The interface serves assets out of `vendor/`~~ — Clockwork ships an
+  installer that copies its UI into the application's `public/`, which would put
+  a second copy of a third party's files where the application's own asset
+  pipeline does not know about them. `Clockwork\Web\Web::asset()` reads them
+  from the installed package instead: one copy, and it is the one Composer just
+  installed.
+- ~~`debug:show` and `debug:clear` are `CommandProvider` commands~~ — reachable
+  whether or not the profiler is running, so `debug:clear` works *before* the
+  thing you are debugging is fixed. `clear` truncates Clockwork's append-only
+  `index` rather than deleting it, which the storage opens unsuppressed on every
+  read.
+- ~~`app/` does not install it~~ — the skeleton is what a consumer copies. It is
+  `require --dev` in `app-test` only, with `bootstrap/modules.php` overlaid so the
+  scratch app can prove a module installed the way an application installs one
+  registers its routes and stays inert when it should.
+
+Two things worth remembering about the wiring, both found by the suite rather than
+by reading: `Clockwork::resolveRequest()` writes into whatever request object is
+already on the instance and does not create one, so a shared `Clockwork` stored
+every request under the first one's id; and `addDataSource()` appends without
+checking for duplicates, so registering per request grows that list for the life
+of the process.
+
+**The skeleton's placeholder-`APP_SECRET` guard is not a profiler concern.** The suite in
+`app-test` pins `APP_ENV` itself rather than inheriting it, because leaving it
+ambient made four contract tests mean different things depending on who ran them
+— and `production` is not available as a pin, since the skeleton refuses a
+placeholder `APP_SECRET` outside a local environment. Unset is the off case, and
+it is the one that matters: it is what an application that never heard of this
+module looks like.
+
 ---
 
 ## Deferred

@@ -31,7 +31,7 @@
     "config": {
         "sort-packages": true
     },
-    "//repositories": "Neither library is on Packagist yet, so both resolve from GitHub. `dev-main` tracks the branch rather than a release, so an application install follows whatever the libraries' `main` currently is — reproducible only while `composer.lock` is committed, which it is. The local path repositories that used to sit here made a sibling checkout resolve offline, at the cost of not working from a clone at all.",
+    "//repositories": "Neither library is on Packagist yet, so all three resolve from GitHub. `dev-main` tracks the branch rather than a release, so an application install follows whatever the libraries' `main` currently is — reproducible only while `composer.lock` is committed, which it is. The local path repositories that used to sit here made a sibling checkout resolve offline, at the cost of not working from a clone at all.",
     "repositories": [
         {
             "type": "vcs",
@@ -40,10 +40,15 @@
         {
             "type": "vcs",
             "url": "git@github.com:iam-adty/empira-auth.git"
+        },
+        {
+            "type": "vcs",
+            "url": "git@github.com:iam-adty/empira-debug-tools.git"
         }
     ],
     "require-dev": {
+        "iam-adty/empira-debug-tools": "dev-main",
         "phpunit/phpunit": "^10.5"
     },
-    "//harness": "This manifest REPLACES app/composer.json wholesale — dev/tools/app-test copies it over the clone rather than merging the two, so the skeleton has one manifest and the scratch app has this one. Nothing keeps them in step: when app/composer.json changes a shared dependency, change it here too, or the scratch app quietly tests an install nobody ships. The `seed` script works here because src/Console/SeedCommand.php sits where the skeleton's own bootstrap discovers commands — which is exactly what could not have happened in the skeleton, where the broken `@seed` script used to sit."
+    "//harness": "This manifest REPLACES app/composer.json wholesale — dev/tools/app-test copies it over the clone rather than merging the two, so the skeleton has one manifest and the scratch app has this one. Nothing keeps them in step: when app/composer.json changes a shared dependency, change it here too, or the scratch app quietly tests an install nobody ships. `bootstrap/modules.php` is replaced the same way, which is why it repeats the skeleton's AuthModule rather than editing it. The profiler is require-dev: it is a development tool, and shipping it in an install nobody develops with is a dependency nobody chose. The `seed` script works here because src/Console/SeedCommand.php sits where the skeleton's own bootstrap discovers commands — which is exactly what could not have happened in the skeleton, where the broken `@seed` script used to sit. The `seed` script works here because src/Console/SeedCommand.php sits where the skeleton's own bootstrap discovers commands — which is exactly what could not have happened in the skeleton, where the broken `@seed` script used to sit."
 }

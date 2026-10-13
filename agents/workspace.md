@@ -15,20 +15,24 @@ installs on its own.
 
 ```
 .
-├── principle/   git repo   iam-adty/empira-principle   Empira\             the framework
-├── auth/        git repo   iam-adty/empira-auth        Empira\Auth\        authentication, as a module
-├── app/         git repo   iam-adty/empira-app         App\                a bare skeleton
-└── dev/         git repo   (not a package)                                  AI material, plans, skills
+├── principle/   git repo   iam-adty/empira-principle    Empira\             the framework
+├── auth/        git repo   iam-adty/empira-auth         Empira\Auth\        authentication, as a module
+├── frankenphp/  git repo   iam-adty/empira-frankenphp   Empira\FrankenPhp\  worker mode, as a module
+├── debugtools/  git repo   iam-adty/empira-debug-tools  Empira\DebugTools\  profiling, as a module
+├── app/         git repo   iam-adty/empira-app          App\                a bare skeleton
+└── dev/         git repo   (not a package)                                   AI material, plans, skills
 ```
 
 Nothing here is versioned at the workspace root — there is no repository there,
-and adding one would tie the three packages together in a way that makes them
-harder to publish independently. `dev/` is a fourth repository for the material
-that belongs to none of the three.
+and adding one would tie the packages together in a way that makes them harder
+to publish independently. `dev/` is a repository for the material that belongs to
+none of them.
 
-**The dependency runs outward.** `auth` requires `principle`; `app` requires both.
-The framework requires neither, and boots, serves requests, maps entities and
-runs migrations without them.
+**The dependency runs outward.** `auth`, `frankenphp` and `debugtools` each
+require `principle`; `app` requires whichever it installs. The framework requires
+none of them, and boots, serves requests, maps entities and runs migrations
+without them. `app-test/` sits outside all of it: generated, disposable, and never
+pushed.
 
 That direction is not an accident. Authentication used to live inside the
 framework's spine — `Application` imported `Auth`, built one per request, and
@@ -43,20 +47,24 @@ core to feature, is one that cannot be cut.
 |---|---|
 | the framework | [`principle.md`](principle.md) |
 | authentication | [`auth.md`](auth.md) |
+| worker mode | [`frankenphp.md`](frankenphp.md) |
+| profiling | [`debugtools.md`](debugtools.md) |
 | the application | [`app.md`](app.md) |
 | plans and specs | [`../planning/CHECKLIST.md`](../planning/CHECKLIST.md), [`../planning/SPEC.md`](../planning/SPEC.md) |
 
 Then the reference, which stays in the framework package because it ships to
 consumers: [`principle/docs/`](../../principle/docs/).
 
-**Where a session starts decides what it loads**, and all four places work:
+**Where a session starts decides what it loads**, and every place works:
 
 | Started in | Instructions | Skills |
 |---|---|---|
 | `principle/` | `principle.md` + the framework's docs | all four |
 | `auth/` | `auth.md` + its README | all four |
+| `frankenphp/` | `frankenphp.md` + its README | all four |
+| `debugtools/` | `debugtools.md` + its README | all four |
 | `app/` | `app.md` + its README | all four |
-| `dev/` | all four agent files | all four |
+| `dev/` | all five agent files | all four |
 | the workspace root | `AGENTS.md`, a pointer to this directory | none |
 
 Each package's `opencode.json` is committed and names `../dev/…`, so nothing here
@@ -76,12 +84,12 @@ never changes is worse than no list because it looks like progress tracking. Wri
 it when the plan exists, and update it as items complete, are dropped, or turn out
 to be unnecessary.
 
-**Git is per package, not here.** `principle/`, `auth/` and `app/` each have
-their own repository. Do not `git init` here, and do not commit from this
-directory — there is no repository and adding one would make the packages harder
-to publish independently. `dev/` is the exception, and it was deliberate: the AI
-material spans all three packages and belongs to none, so it is versioned as a
-fourth repository rather than dropped.
+**Git is per package, not here.** `principle/`, `auth/`, `frankenphp/`,
+`debugtools/` and `app/` each have their own repository. Do not `git init` here,
+and do not commit from this directory — there is no repository and adding one
+would make the packages harder to publish independently. `dev/` is the exception,
+and it was deliberate: the AI material spans every package and belongs to none of
+them, so it is versioned separately rather than dropped.
 
 **The root README is a note, not an artefact.** It is not versioned by any repo,
 so it can drift from the code without anyone noticing. **The code is the source
@@ -127,11 +135,10 @@ dev/tools/check-links                  # links, anchors, and named APIs all exis
 dev/tools/check-readme-installs        # every README's install snippet works as written
 ```
 
-Scratch files belong in the workspace `tmp/`, never `/tmp`. It sits above all
-three packages and is mounted into every container, so one relative path —
-`dirname(__DIR__, 2) . '/tmp'` — finds it from the host and from inside a runner.
-It should hold nothing at all: every test that creates a fixture there removes it,
-and `ls -A tmp` is how you check that it did.
+Scratch files belong in the workspace `tmp/`, never `/tmp`. It sits above every
+package, so one relative path — `dirname(__DIR__, 2) . '/tmp'` — finds it from any
+of them. It should hold nothing at all: every test that creates a fixture there
+removes it, and `ls -A tmp` is how you check that it did.
 
 ```bash
 ls -A tmp

@@ -42,10 +42,27 @@ CACHE="$ROOT/dev/.cache/check-readme-installs"
 
 mkdir -p "$CACHE"
 
-for pkg in principle auth frankenphp; do
+for pkg in principle auth frankenphp debugtools; do
     readme="$ROOT/$pkg/README.md"
     work="$WORK/verbatim-$pkg"
     repo="$ROOT/$pkg"
+
+    # The package name from the manifest, not the directory name.
+    #
+    # They agree for `principle`, `auth` and `frankenphp`, which is why this was
+    # the directory name for as long as it was — and then `debugtools` arrived,
+    # installed as `iam-adty/empira-debug-tools`, and the check reported FAILED
+    # against a snippet that installs perfectly well. The grep below is for the
+    # package, so a name guessed from the directory is a verdict about the wrong
+    # thing.
+    #
+    # Falls back to the directory name for a package with no manifest yet, which
+    # is the "SKIPPED — no composer.json" case below and should not also read as
+    # a failed install.
+    suffix=$(php -r '
+        $name = json_decode(file_get_contents($argv[1]), true, 512, JSON_THROW_ON_ERROR)["name"] ?? "";
+        echo str_starts_with($name, "iam-adty/empira-") ? substr($name, strlen("iam-adty/empira-")) : $argv[2];
+    ' "$repo/composer.json" "$pkg" 2>/dev/null || echo "$pkg")
 
     # The ```json block and the composer require line, taken verbatim.
     json=$(awk '/^```json$/{f=1;next} f&&/^```$/{exit} f' "$readme")
@@ -80,8 +97,8 @@ for pkg in principle auth frankenphp; do
 
     out=$(cd "$work" && eval "$require --no-interaction --no-progress" 2>&1)
 
-    if echo "$out" | grep -q "Installing iam-adty/empira-$pkg"; then
-        resolved=$(echo "$out" | grep -oE "Installing iam-adty/empira-$pkg \(.*\)" | head -1)
+    if echo "$out" | grep -q "Installing iam-adty/empira-$suffix"; then
+        resolved=$(echo "$out" | grep -oE "Installing iam-adty/empira-$suffix \(.*\)" | head -1)
         printf '%-12s OK     %s\n' "$pkg" "$resolved"
 
         # The verdict is stored under the key it was reached with — commit *and*

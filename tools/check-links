@@ -351,7 +351,7 @@ $apiClasses = [];
 /** Every namespace that a real class lives in, at every level. */
 $apiNamespaces = [];
 
-foreach (['principle/src', 'auth/src', 'frankenphp/src', 'app/src'] as $base) {
+foreach (['principle/src', 'auth/src', 'frankenphp/src', 'debugtools/src', 'app/src'] as $base) {
     if (!is_dir($base)) {
         continue;
     }
