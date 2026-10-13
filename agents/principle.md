@@ -16,7 +16,7 @@ understands. What stays hand-written is the part that is the framework's actual
 subject — components, routing, views, and the htmx wiring.
 
 What the framework does **not** do is assume an application needs a feature.
-Authentication is a module in [`../auth`](../auth), and this framework boots,
+Authentication is a module in [`../auth`](../../auth), and this framework boots,
 serves requests, maps entities and runs migrations without it.
 
 ```

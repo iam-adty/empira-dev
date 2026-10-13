@@ -8,7 +8,7 @@ module.
 
 ## What this is
 
-`iam-adty/empira-frankenphp` — worker mode for [Empira](../principle), as a
+`iam-adty/empira-frankenphp` — worker mode for [Empira](../../principle), as a
 **module**. The framework does not ship it, does not require it, and runs without
 it.
 
@@ -130,7 +130,7 @@ is* — usually it can, and usually the honest answer is a narrower contract.
 
 ## Then
 
-- [`principle/docs/workers.md`](../principle/docs/workers.md) — why workers leak,
+- [`principle/docs/workers.md`](../../principle/docs/workers.md) — why workers leak,
   and the rules for your own code.
-- [`../auth/agents`](../auth) — the other module, and the worked example for
+- [`../auth/agents`](../../auth) — the other module, and the worked example for
   everything a module is.

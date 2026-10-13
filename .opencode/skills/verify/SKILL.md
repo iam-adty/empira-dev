@@ -203,15 +203,18 @@ database it guards, not a leftover.
 
 ## Rebuilding
 
-Build once. After that these are the **only** changes that need it:
+There is nothing to rebuild. The application runs on stock `nginx:alpine` and
+`php:8.4-fpm-alpine` with the workspace bind-mounted, so no image is built and
+no `Dockerfile` or entrypoint exists to change.
+
+The only thing that needs re-running is a dependency install:
 
 - a `composer.json` in either package — dependencies or an autoload path
-- a change to the Dockerfile or `docker/entrypoint.sh`
 - the first run on a fresh clone
 
 Everything else — any PHP file under either package — is mounted and watched. If
-you find yourself running `docker compose up --build` to check a code change,
-something is wrong with the mounts, not with your change.
+you find yourself reaching for `docker compose up --build`, something is wrong
+with the mounts, not with your change.
 
 ## Prove the test can fail
 

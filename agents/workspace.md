@@ -47,7 +47,7 @@ core to feature, is one that cannot be cut.
 | plans and specs | [`../planning/CHECKLIST.md`](../planning/CHECKLIST.md), [`../planning/SPEC.md`](../planning/SPEC.md) |
 
 Then the reference, which stays in the framework package because it ships to
-consumers: [`principle/docs/`](principle/docs/).
+consumers: [`principle/docs/`](../../principle/docs/).
 
 **Where a session starts decides what it loads**, and all four places work:
 

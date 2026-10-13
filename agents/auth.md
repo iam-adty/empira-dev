@@ -6,7 +6,7 @@ Guidance for AI agents and new contributors working on the Empira auth module.
 
 ## What this is
 
-`iam-adty/empira-auth` — authentication for [Empira](../principle), as a
+`iam-adty/empira-auth` — authentication for [Empira](../../principle), as a
 **module**. The framework does not ship it, does not know its classes, and boots
 without it.
 

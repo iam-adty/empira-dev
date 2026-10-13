@@ -153,25 +153,37 @@ declaring the same class name, and which one Doctrine runs depends on which
 
 ## There is no seed
 
-The seeder is gone, and the entrypoint no longer calls one. A skeleton has no
+The seeder is gone, and nothing in this repository calls one. A skeleton has no
 accounts to invent, and **a deploy step that seeds demo credentials into anything
-reachable is the wrong default to ship in a file somebody copies.**
+reachable is the wrong default to ship in a file somebody copies.** There is no
+`docker/entrypoint.sh` to add one back to either — the runtime is stock nginx and
+php-fpm with no image to build.
 
-If you want one:
+The one that does exist is [`app-test/src/SeedCommand.php`](../../dev/app-test-harness/src/SeedCommand.php),
+in the generated scratch app, registered from its `bootstrap/harness.php`. That is
+where a seeder belongs in this workspace: **outside the thing that ships.**
+
+If you add one to a real application, register it at boot the same way — but in
+your own bootstrap, not inside `App::boot()`, so that `App.php` stays a readable
+wiring file rather than a place commands accumulate:
 
 ```php
-$app->command('seed', new Seed($repository));   // in App::boot()
+// bootstrap/app.php
+$app = App::boot(csrf: false);
+$app->command('seed', new Seed($app->entities()));
+
+return $app;
 ```
 
-and add `php vendor/bin/empira seed` back to `docker/entrypoint.sh`. Make it
-idempotent — a deploy step is allowed to be run twice, because a retried pipeline
-should not fail on a seed that already happened.
+Make it idempotent — a deploy step is allowed to be run twice, because a retried
+pipeline should not fail on a seed that already happened.
 
-## What the tests cover, and why there are only 15
+## What the suite covers, and why it is small
 
-The suite went from 45 tests to 15 because most of them tested features that no
-longer exist. A test for a feature nobody ships is a test nobody reads and a
-suite that fails for reasons unrelated to what it is meant to catch.
+It went from 45 tests to 16 because most of them tested features that no longer
+exist, and then to 20 when the seeder's four came with it. A test for a feature
+nobody ships is a test nobody reads and a suite that fails for reasons unrelated
+to what it is meant to catch.
 
 What is left is the question a skeleton actually has to answer: *does this boot,
 and does it serve?* — the page renders, an htmx request gets only its region, an
@@ -180,9 +192,11 @@ installs and publishes its façade, its table arrived without an application
 migration, the entity directory is discoverable, the secret guard guards, and
 `migrate` is idempotent.
 
-`testThisApplicationRegistersNoCommandsOfItsOwn` is a leftover-detector: it
-asserts `seed` is gone, so a command that should not be here cannot quietly
-return.
+Nothing here should stop you adding a test. The rule is narrower than it looks:
+**a test for a feature this skeleton has must live in `app-test/`, not here.**
+`testBootingRegistersNoCommandsOfItsOwn` asserts that boot registers nothing, so a
+command that should not be in the skeleton cannot quietly return — and
+`dev/tools/module-contract` is what stops the `seed` script coming back with it.
 
 ## The libraries are installed, not linked
 

@@ -1,0 +1,318 @@
+#!/usr/bin/env bash
+#
+# Check that every relative link in the documentation resolves, and every anchor
+# exists.
+#
+#     dev/tools/check-links
+#
+# ## Why this lives here
+#
+# Nineteen cross-repository links had gone stale, and no tool noticed. Not the
+# tests, not `module-contract`, not `check-readme-installs` — none of them read a
+# markdown file's links. So this does, and it is the third guard in `dev/tools`
+# for the same reason the other two are there: a rule nobody checks is a rule
+# somebody has to remember.
+#
+# ## The rule that actually mattered
+#
+# Two kinds of broken link hide in a workspace of sibling clones, and only one of
+# them is visible here.
+#
+# A link like `principle/README.md → ../app` **resolves in this workspace**,
+# because the repository happens to sit next to the one it names. It is a 404 for
+# everyone else: in a lone clone it dangles, and on GitHub it resolves against
+# the repository rather than the filesystem, so `auth/README.md → ../principle`
+# becomes `github.com/iam-adty/principle` — a repository that does not exist.
+#
+# A link that passes that check has been getting worse quietly for months, which
+# is exactly what makes it worth a tool. So there are two rules, and the second
+# is the one that matters:
+#
+#   1. a relative link must resolve; and
+#   2. inside a *published* package, a relative link must not escape that package.
+#      Outside one, the answer is an absolute `https://github.com/iam-adty/…`
+#      URL, which is already the convention in the places that learned it the hard
+#      way.
+#
+# ## What it deliberately does not check
+#
+# `app-test/` — it is generated from `app/`, so its markdown is a copy of markdown
+# already checked here. `vendor/`, for the usual reasons.
+#
+# Links inside fenced code blocks are skipped. A `](…)` in a fenced block is
+# sample text, and treating it as a link produces failures nobody can act on.
+
+set -euo pipefail
+
+cd "$(dirname "${BASH_SOURCE[0]}")/../.."
+
+php <<'PHP'
+<?php
+
+declare(strict_types=1);
+
+$root = getcwd();
+
+/** Repositories that publish their markdown to consumers. */
+const PACKAGES = ['principle', 'auth', 'frankenphp', 'app'];
+
+/** Directory names skipped anywhere in the tree. */
+const SKIP = ['vendor', 'node_modules', '.git', 'app-test'];
+
+/**
+ * GitHub's heading anchors: lowercase, inline code unwrapped, punctuation
+ * dropped but hyphens kept, spaces to hyphens.
+ *
+ * The hyphens are the part worth stating. Stripping them produces
+ * `4-writeback-shipped` for a heading that is really `#4-write-back-shipped`, and
+ * a checker that invents anchors nobody has will fail on the day someone writes a
+ * real one.
+ */
+function anchorsOf(string $file): array
+{
+    $anchors = [];
+
+    foreach (file($file, FILE_IGNORE_NEW_LINES) ?: [] as $line) {
+        if (preg_match('/^#{1,6}\s+(.*)$/', $line, $m) !== 1) {
+            continue;
+        }
+
+        $heading = preg_replace('/`([^`]*)`/', '$1', trim($m[1]));
+        $heading = strtolower($heading);
+        $heading = preg_replace('/[^\w\- ]/', '', $heading);
+        $anchors[] = trim(str_replace(' ', '-', $heading), '-');
+    }
+
+    return $anchors;
+}
+
+/** The published package a file belongs to, or null for workspace-only files. */
+function packageOf(string $path): ?string
+{
+    $head = explode('/', $path, 2)[0];
+
+    return in_array($head, PACKAGES, true) ? $head : null;
+}
+
+/**
+ * The local file an absolute GitHub URL names, when it names one this workspace
+ * has a checkout of.
+ *
+ *     https://github.com/iam-adty/empira-auth/blob/main/README.md#anchor
+ *      → /…/auth/README.md
+ *
+ * Only `blob/main` is understood, because that is the only form this workspace
+ * writes, and a repository maps to its directory by an explicit table — the two
+ * are not always the same string (`empira-dev` is the `dev/` directory).
+ *
+ * Returns null for anything not resolvable here, so an external link, or a file
+ * in a repository that is not cloned, is left alone rather than guessed at.
+ */
+function siblingFromUrl(string $url): ?string
+{
+    $repositories = [
+        'empira-principle' => 'principle',
+        'empira-auth' => 'auth',
+        'empira-frankenphp' => 'frankenphp',
+        'empira-app' => 'app',
+        'empira-dev' => 'dev',
+    ];
+
+    if (preg_match(
+        '~^https://github\.com/iam-adty/(empira-[a-z]+)/blob/main/([^#]+)(?:#(.*))?$~',
+        $url,
+        $m
+    ) !== 1) {
+        return null;
+    }
+
+    if (!isset($repositories[$m[1]])) {
+        return null;
+    }
+
+    $local = getcwd() . '/' . $repositories[$m[1]] . '/' . $m[2];
+
+    // Only a file actually present is worth checking an anchor against. Anything
+    // else is out of this workspace's reach, not broken.
+    return is_file($local) ? $local : null;
+}
+
+/** The anchor in a URL, or '' when it has none. */
+function anchorOf(string $url): string
+{
+    $position = strpos($url, '#');
+
+    return $position === false ? '' : substr($url, $position + 1);
+}
+
+/** Collapse `.` and `..` without touching the filesystem. */
+function normalise(string $path): string
+{
+    $out = [];
+
+    foreach (explode('/', $path) as $segment) {
+        if ($segment === '.' || $segment === '') {
+            continue;
+        }
+
+        if ($segment === '..') {
+            array_pop($out);
+
+            continue;
+        }
+
+        $out[] = $segment;
+    }
+
+    return '/' . implode('/', $out);
+}
+
+function isSkipped(string $relative): bool
+{
+    foreach (explode('/', $relative) as $segment) {
+        if (in_array($segment, SKIP, true)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+$files = [];
+$iterator = new RecursiveIteratorIterator(
+    new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS)
+);
+
+foreach ($iterator as $file) {
+    if (!$file->isFile() || $file->getExtension() !== 'md') {
+        continue;
+    }
+
+    $relative = substr($file->getPathname(), strlen($root) + 1);
+
+    if (!isSkipped($relative)) {
+        $files[] = $relative;
+    }
+}
+
+sort($files);
+
+$checked = 0;
+$failures = [];
+
+foreach ($files as $relative) {
+    $absolute = $root . '/' . $relative;
+    $package = packageOf($relative);
+    $lines = file($absolute, FILE_IGNORE_NEW_LINES) ?: [];
+    $fence = null;
+
+    foreach ($lines as $index => $line) {
+        // A fence opened with ``` or ~~~ stays open until a matching close, so
+        // that a line inside one is never mistaken for a link.
+        if (preg_match('/^\s*(```|~~~)/', $line, $m) === 1) {
+            if ($fence === null) {
+                $fence = $m[1];
+            } elseif ($fence === $m[1]) {
+                $fence = null;
+            }
+
+            continue;
+        }
+
+        if ($fence !== null) {
+            continue;
+        }
+
+        if (preg_match_all('/\]\(([^)\s]+)\)/', $line, $matches) === 0) {
+            continue;
+        }
+
+        foreach ($matches[1] as $target) {
+            if (preg_match('#^(https?://|mailto:)#', $target) === 1) {
+                // An absolute GitHub URL into a repository this workspace has
+                // cloned still names a file sitting on disk, so its anchor can be
+                // checked. This matters more than it sounds: the ten links fixed
+                // by this tool became absolute URLs, which would otherwise have
+                // moved them from checked to uncheckable — the opposite of the
+                // point.
+                $local = siblingFromUrl($target);
+                $anchor = anchorOf($target);
+
+                if ($local !== null && $anchor !== '' && !in_array($anchor, anchorsOf($local), true)) {
+                    $failures[] = [
+                        $relative,
+                        $index + 1,
+                        $target,
+                        'anchor not found in ' . substr($local, strlen($root) + 1),
+                    ];
+                }
+
+                $checked++;
+
+                continue;
+            }
+
+            $checked++;
+            [$path, $anchor] = array_pad(explode('#', $target, 2), 2, '');
+
+            if ($path === '') {
+                // A bare `#fragment` is a link into this same file, and it breaks
+                // silently the first time somebody renames the heading.
+                if ($anchor !== '' && !in_array($anchor, anchorsOf($absolute), true)) {
+                    $failures[] = [$relative, $index + 1, $target, 'anchor not found in this file'];
+                }
+
+                continue;
+            }
+
+            $resolved = str_starts_with($path, '/')
+                ? $root . $path
+                : $root . '/' . dirname($relative) . '/' . $path;
+
+            $resolved = normalise($resolved);
+
+            if (!file_exists($resolved)) {
+                $failures[] = [$relative, $index + 1, $target, 'does not resolve'];
+
+                continue;
+            }
+
+            if ($package !== null && !str_starts_with($resolved, $root . '/' . $package . '/')) {
+                $failures[] = [
+                    $relative,
+                    $index + 1,
+                    $target,
+                    sprintf(
+                        'escapes %s/ — resolves only because this workspace puts siblings side by side. Use an '
+                        . 'https://github.com/iam-adty/… URL: a consumer has one repository, not four.',
+                        $package
+                    ),
+                ];
+
+                continue;
+            }
+
+            if ($anchor !== '' && is_file($resolved) && !in_array($anchor, anchorsOf($resolved), true)) {
+                $failures[] = [$relative, $index + 1, $target, 'anchor not found in the target'];
+            }
+        }
+    }
+}
+
+echo "Documentation links\n";
+
+foreach ($failures as [$file, $line, $target, $why]) {
+    printf("  \033[31mFAIL\033[0m  %s:%d  %s\n        %s\n", $file, $line, $target, $why);
+}
+
+printf("\n  %d relative link(s) checked across %d file(s).\n", $checked, count($files));
+
+if ($failures === []) {
+    echo "  \033[32mok\033[0m    every link resolves and every anchor exists\n";
+    exit(0);
+}
+
+printf("\n  \033[31m%d problem(s).\033[0m\n", count($failures));
+
+exit(1);
+PHP
