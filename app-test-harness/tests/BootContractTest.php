@@ -99,19 +99,23 @@ final class BootContractTest extends TestCase
      * The routes are the part that matters, because they are the part that is
      * reachable.
      */
-    public function testTheProfilerInterfaceIsAbsentUnlessTheEnvironmentAsksForIt(): void
+    public function testTheProfilerIsAbsentUnlessTheEnvironmentAsksForIt(): void
     {
         $patterns = fn (): array => array_map(
             static fn ($route): string => $route->pattern,
             App::boot()->routes()->all(),
         );
 
+        // The API route, not `/_clockwork` itself. The module serves no page —
+        // nothing is injected into a response and no JavaScript ships — so the
+        // data endpoint is the whole of what it publishes, and that is what has
+        // to be missing when it is off.
         self::withoutProfiler(function () use ($patterns): void {
-            self::assertNotContains('/_clockwork', $patterns());
+            self::assertNotContains('/_clockwork/api', $patterns());
         });
 
         self::withProfiler(function () use ($patterns): void {
-            self::assertContains('/_clockwork', $patterns());
+            self::assertContains('/_clockwork/api', $patterns());
         });
     }
 
