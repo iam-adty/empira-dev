@@ -18,7 +18,7 @@
         "../principle/docs/workers.md",
         "../principle/docs/recipes.md"
     ],
-    "//permission": "The workspace's rule, and the reason it lives here rather than in any package: `sed -i*` is denied and the same is true of a Python or heredoc rewrite, but the last of those cannot be expressed as a path pattern. The written rule is in agents/workspace.md and agents/principle.md; this is the part a machine can enforce. `docker compose *` is allowed because nothing here needs rebuilding to see a library change — the app bind-mounts the workspace — and asking about `docker compose` on every command trains people to approve without reading.",
+    "//permission": "The workspace's rule, and the reason it lives here rather than in any package: `sed -i*` is denied and the same is true of a Python or heredoc rewrite, but the last of those cannot be expressed as a path pattern. The written rule is in agents/workspace.md and agents/principle.md; this is the part a machine can enforce.",
     "permission": {
         "bash": {
             "*": "ask",
@@ -30,7 +30,7 @@
             "git status*": "allow",
             "git diff*": "allow",
             "git log*": "allow",
-            "docker compose *": "allow",
+            
             "curl * 127.0.0.1*": "allow",
             "curl * localhost*": "allow",
             "grep *": "allow",

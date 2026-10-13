@@ -9,7 +9,7 @@ and serves, and the answer to "how do I wire this up?".
 ## Commands
 
 ```bash
-composer serve                      # http://localhost:8000
+composer serve                      # every interface, :8000
 vendor/bin/empira migrate           # the schema, before anything serves
 composer validate                   # must stay clean
 ```
@@ -18,14 +18,23 @@ There is no `seed` command, and there is no test suite here either. See
 [Account switching](#there-is-no-seed) below, and
 [The skeleton ships no tests](#the-skeleton-ships-no-tests).
 
+**`composer serve` binds every interface, not just loopback.** It is
+`vendor/bin/empira serve --host=0.0.0.0`, so the skeleton answers on this
+machine's address as well as `localhost` — deliberate, because the machine is
+often a VM.
+
+That means it is serving `.env.example`'s placeholder `APP_SECRET` to the
+network. `App::boot()` refuses that secret only when `APP_ENV` is `production`,
+and unset counts as local, so the guard does not fire here. Anything that can
+reach the port can mint a signed component URL and fetch any component with any
+props. Use `--host=127.0.0.1` on a network you do not control.
+
 ## Layout
 
 ```
 app/
 ├── composer.json      requires empira-principle and empira-auth, both from GitHub
 ├── composer.lock      committed: an application pins its build
-├── docker-compose.yml nginx + php-fpm + PostgreSQL, no image build
-├── docker/nginx.conf  bind-mounted into stock nginx
 ├── migrations/        empty, on purpose — see the .gitkeep
 ├── bootstrap/app.php  the console entry `vendor/bin/empira` boots
 ├── bootstrap/modules.php  what this application is made of
@@ -89,7 +98,7 @@ a page, and a layout.
 
 The trade is real and worth stating: **this app no longer demonstrates what the
 framework can do.** The auth module's own suite demonstrates authentication; the
-framework's 485 tests demonstrate components, routing, regions, sessions, CSRF
+framework's 483 tests demonstrate components, routing, regions, sessions, CSRF
 and the ORM. If you want a worked example of a feature end to end, read that
 package's tests rather than looking for it here.
 
@@ -158,8 +167,8 @@ declaring the same class name, and which one Doctrine runs depends on which
 The seeder is gone, and nothing in this repository calls one. A skeleton has no
 accounts to invent, and **a deploy step that seeds demo credentials into anything
 reachable is the wrong default to ship in a file somebody copies.** There is no
-`docker/entrypoint.sh` to add one back to either — the runtime is stock nginx and
-php-fpm with no image to build.
+entrypoint to add one back to either, because there is no entrypoint: the
+runtime is `php -S`, handed over by the framework's own console.
 
 The one that does exist is [`app-test/src/Console/SeedCommand.php`](../../dev/app-test-harness/src/Console/SeedCommand.php),
 in the generated scratch app, discovered from its own `src/Console/`. That is
@@ -220,46 +229,26 @@ point of a public repository is that someone can get this working from nothing
 but the URL. It also took `franzl/studio` with it, since studio exists only to
 maintain symlinks.
 
-**Consequence: an edit under `principle/src` is no longer live by default.** It
-reaches this application through `composer update iam-adty/empira-principle` and
-a new push. That is deliberate — the container runs what `composer.lock` pins, so
-it and the host cannot quietly disagree about which version of a library is
-running.
+**Consequence: an edit under `principle/src` is no longer live.** It reaches
+this application through `composer update iam-adty/empira-principle`, and the
+change has to be pushed first, because this application installs its siblings
+from GitHub rather than from the checkout beside it.
 
-**To develop a library against a running container**, put this in
-`docker-compose.override.yml` (gitignored, loaded automatically):
+That is the trade for removing the container. A bind mount made a sibling edit
+visible to a running server without a rebuild, and it also produced a package
+split down the middle — classes from the working copy, `migrations/` from the
+image, so a new class arrived while the migration creating its table did not, and
+the failure appeared at query time with nothing pointing at a mount. Trading
+"instantly live" for "the runtime is what `composer.lock` pins" is the better of
+the two: an application that picks up a dependency's `main` on its own is not
+reproducible.
 
-```yaml
-services:
-  app:
-    volumes:
-      - ../principle:/workspace/app/vendor/iam-adty/empira-principle
-      - ../auth:/workspace/app/vendor/iam-adty/empira-auth
-```
-
-**The lock is what moves the pin, not a rebuild.** After a library change is
-pushed, this application's install still holds the old commit until you run:
+**The lock is what moves the pin.** After a library change is pushed, this
+application still holds the old commit until:
 
 ```bash
 cd app && composer update iam-adty/empira-principle iam-adty/empira-auth
 ```
-
-The Docker build reads the lock, so a library change that has not been `composer
-update`d here is simply not in the image — and the build will not tell you, which
-is correct: an application that picks up a dependency's `main` on its own is not
-reproducible.
-
-**Mount each package whole, not `src/`.** They used to be mounted in the
-committed compose file, source directory only, and that produced a package split
-down the middle: classes from the working copy, `migrations/` from the image. A
-new class arrived instantly while the migration creating its table did not, and
-the failure appeared at query time with nothing to point at a mount. Proved by
-appending a line to a migration and finding the container did not see it.
-
-**The image still installs from path packages**, because the build context is the
-workspace root and both siblings are in it — so the build needs all three
-repositories side by side, and the guard in the Dockerfile says so rather than
-failing with a bare `COPY failed`.
 
 ## Things that will bite you
 

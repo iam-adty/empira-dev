@@ -105,20 +105,20 @@ narrower contract — `Security\Identity` and `Security\Guard` exist because
 ## Running things
 
 ```bash
-# the framework — needs Docker, for PostgreSQL
-cd principle && composer test          # 485 tests
+# the framework — host PHP, SQLite, no container
+cd principle && composer test          # 483 tests
 
-# the auth module — no Docker, SQLite
+# the auth module — SQLite
 cd auth && composer test               # 37 tests
 
-# worker mode — no Docker, SQLite
+# worker mode — SQLite
 cd frankenphp && composer test         # 14 tests
 
-# the application — no Docker, SQLite, and not in app/:
+# the application — SQLite, and not in app/:
 dev/tools/app-test check               # 17 tests, in the generated app-test/
 ```
 
-And three checks, none of which need Docker — run these before claiming
+And three checks, none of which need anything running — run these before claiming
 something works, because they catch what a green suite cannot:
 
 ```bash
@@ -138,16 +138,13 @@ ls -A tmp
 ```
 
 ```bash
-cd app && composer serve               # http://localhost:8000
-docker compose -f app up -d            # http://localhost:8080 — nginx + php-fpm, no build
+cd app && composer serve               # every interface, :8000
 ```
 
-`-f` takes the **file**, not the directory, so `docker compose -f app up -d` fails
-with "is a directory". Either spell the file or `cd app` first.
-
-The app stack builds nothing. Both server images are stock and the workspace is
-bind-mounted, so an edit in any package's `src/` is live in the container — which
-also means a library change needs no rebuild and no override file.
+That is the whole runtime: the framework's console, handing over to `php -S`.
+Nothing is built, nothing is started, nothing is waited on. It binds `0.0.0.0` so
+the page answers from another machine, which also means it serves the placeholder
+secret to that network — see [`app.md`](app.md).
 
 Worker mode is optional and lives in its own package. It ships no image — a stock
 PHP cannot become FrankenPHP at runtime, and whether one should be built is an
@@ -160,10 +157,13 @@ Dependencies resolve from GitHub, so a lone clone works:
 cd app && composer install
 ```
 
-Two bind mounts in `app/docker-compose.yml` still point at `../principle/src` and
-`../auth/src`, which makes a sibling edit live for the running container without
-a rebuild. Nothing else in the workspace depends on the directories being beside
-each other — except the image build, which needs all three.
+There are no bind mounts and no image build, and nothing here depends on the
+directories being beside each other any more. Each package installs its siblings
+through Composer's `vcs` repositories, so `app` gets `principle` and `auth` from
+GitHub rather than from the checkout next to it. A sibling edit is therefore not
+live: `composer update iam-adty/empira-principle` is what pulls one in, and the
+change has to be pushed first. That is the trade for not pretending a workspace
+layout is a distribution channel.
 
 Each package requires `dev-main`, so it tracks the **branch**, not a release. A
 change to `principle/main` can therefore break `app`'s install. `app` is the one
@@ -184,11 +184,13 @@ tagging `0.x` — makes Composer treat the version as **stable**, since it parse
 `0.1.0` and `0.0.1` that way. The first release, when there is a reason for one,
 should be `0.1.0-alpha.N`.
 
-**A dependency that is not mounted is a dependency whose edits do not take.**
-`app/docker-compose.yml` bind-mounts `principle/src` *and* `auth/src`; the
-`Dockerfile` declares path repositories for both. Adding a fourth package means
-adding it in both places, and the symptom of forgetting is a change that "did not
-work" rather than an error.
+**A library is `dev-main`, so `app` runs whatever GitHub has, not what is beside
+it.** After editing `principle/src`, `composer update iam-adty/empira-principle`
+inside `app` — and the change has to be pushed first, because `app` installs from
+GitHub rather than from the checkout. The symptom of forgetting is a change that
+"did not work", not an error. `dev/tools/app-test` has the same property by
+design, and `APP_REPO=../app` builds from the working tree instead when that is
+what you want.
 
 ## The application is a skeleton on purpose
 
@@ -202,7 +204,7 @@ slower than never having it.
 
 **The trade is real:** the app no longer demonstrates what the framework can do.
 Authentication is demonstrated by `auth/`'s 37 tests, components and routing by
-the framework's 485. If you are looking for a worked example of a feature, look
+the framework's 483. If you are looking for a worked example of a feature, look
 there rather than in the app.
 
 ## Cross-repository status

@@ -142,30 +142,23 @@ shipped once. Check `principle/src/View/Layout.php`.
 
 Either server works; pick by what you are chasing. From the **workspace root**:
 
-```bash
-# The worker stack — what the app actually runs on, and live: the source is
-# mounted and watched, so an edit is an edit without a rebuild. 2 × CPU workers.
-cd app && docker compose up -d --wait && cd ..
-B=http://127.0.0.1:8080
-
-# …or the built-in server, if you want no Docker at all. Classic mode, one
-# request per process, and **not** a substitute for the worker when the bug is
-# about state carrying between requests.
-B=http://127.0.0.1:8000
-(cd app && php -S 127.0.0.1:8000 -t public public/index.php &)
-```
-
-**If the bug is state carrying between requests, force one worker.** At 2 × CPU
-a leak only shows up when two consecutive requests for one session land on the
-same worker — about 1 in 32 — so it will hide from you exactly when you are
-looking for it:
+There is one runtime now: `php -S`, handed over by the framework's console.
 
 ```bash
-cd app && FRANKENPHP_WORKERS=1 docker compose up -d --force-recreate --wait && cd ..
+B=http://localhost:8000
+(cd app && composer serve > /dev/null 2>&1 &)
 ```
 
-One worker makes every request share a process, so the symptom cannot hide. Put
-it back afterwards without the variable.
+**State carrying between requests cannot be reproduced here.** A per-worker state
+leak only shows itself when two consecutive requests for one session land on the
+*same* long-lived process — about 1 in 32 at 2 × CPU workers — and this
+application is served one request per process, so a leak has nothing to leak
+into. For that class of bug, use the worker's own suite
+(`cd frankenphp && composer test`) or reproduce it with a test that holds an
+`Application` across two `handle()` calls, which is what `WorkerTest` does.
+
+Worker mode itself needs a FrankenPHP binary and nothing in this workspace runs
+one; see CHECKLIST §5.
 
 ```bash
 mkdir -p tmp

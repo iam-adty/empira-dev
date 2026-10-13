@@ -1,6 +1,6 @@
 ---
 name: verify
-description: Use before claiming a change works, before committing, or when asked to verify, check, confirm or test the framework. Runs lint, the PHPUnit suite, and a live HTTP smoke test of the demo app against the FrankenPHP worker stack, including CSRF, token forgery, session isolation and fragment rendering.
+description: Use before claiming a change works, before committing, or when asked to verify, check, confirm or test the framework. Runs lint, the PHPUnit suite, three documentation gates, and a live HTTP smoke test of the skeleton on the host, including htmx fragment rendering and that nothing outside public/ is served.
 ---
 
 # Verifying the framework
@@ -28,10 +28,10 @@ and from inside the runner. `/tmp` is out — it is outside the working director
 which means an `external_directory` prompt on every use, and a failed run leaves
 its evidence somewhere you will not think to look.
 
-**Never rebuild to test a code change.** The framework's source is bind-mounted
-into both the test runner and the app stack, and the worker watches it. Build
-once; after that an edit is an edit in the running system. The only things that
-need `docker compose build` are listed under [Rebuilding](#rebuilding).
+**Never rebuild to test a code change.** Nothing is built here. The suite runs on
+the host PHP against SQLite, and an edit under `src/` is an edit in the next run —
+there is no image, no mount and no step between the two. The only thing that
+needs re-running is a dependency install; see [Rebuilding](#rebuilding).
 
 ## The checks
 
@@ -47,8 +47,8 @@ PHP without the extension and has been missed by `find -name '*.php'` before.
 
 ### 1a. Documentation gates
 
-Run these before the suite. None needs Docker, they finish in seconds, and they
-catch the failures a green suite cannot — a test suite says nothing about whether
+Run these before the suite. None needs anything running, they finish in seconds,
+and they catch the failures a green suite cannot — a test suite says nothing about whether
 a document still describes the code.
 
 ```bash
@@ -81,7 +81,7 @@ you do not need.
 cd principle && composer test
 ```
 
-`485 tests, 1087 assertions` is the current baseline. **If your change adds or
+`483 tests, 1082 assertions` is the current baseline. **If your change adds or
 removes tests, update that number in every document that quotes it** —
 `dev/agents/principle.md`, `dev/planning/CHECKLIST.md`, `principle/ARCHITECTURE.md`, `principle/docs/testing.md`.
 
@@ -96,7 +96,7 @@ composer test -- --filter=testACycle
 
 ### 3. The other two suites
 
-Neither needs Docker — both are plain PHPUnit on SQLite. The auth module is a
+Both are plain PHPUnit on SQLite. The auth module is a
 separate package with its own gate, and it is the one that proves the module
 contract end to end.
 
@@ -111,140 +111,88 @@ A change to `principle/src/Security/` or to the module contract is not finished
 until `auth` passes, and `auth` cannot see an uncommitted change in `principle`
 unless you have re-run `composer update iam-adty/empira-principle` there.
 
-### 4. Live smoke, against the worker
+### 4. Live smoke, on the host
 
-A passing suite does not prove the browser path works, and — this is the part
-that keeps biting — **it does not prove worker mode works either.** The session
-fix passed all 744 tests and was completely broken under a worker: nobody stayed
-signed in, because the guard was reading a session nothing wrote to.
+Start the application, curl it, stop it. No container and no server.
 
 **Run from the workspace root**, so `tmp/` is inside the working directory and
 the relative paths below mean what they say.
 
 ```bash
 mkdir -p tmp
-JAR=tmp/verify-jar.txt && rm -f "$JAR"
 OUT=tmp/verify
+rm -f "$OUT".*
 
-cd app
-docker compose up -d --wait          # no worker override: this runs at 2 x CPU
-cd ..
+(cd app && composer serve > "../$OUT".serve.log 2>&1 &)
+sleep 2                                  # `php -S` needs a moment to bind
 
-# the sign-in page, and the signed action its form carries
-curl -s -c "$JAR" -o "$OUT.0.html" -w 'GET  /login   %{http_code}\n' http://127.0.0.1:8080/login
-CSRF=$(grep -oE 'X-CSRF-Token&quot;:&quot;[a-f0-9]+' "$OUT.0.html" | head -1 | grep -oE '[a-f0-9]{40,}')
-ACTION=$(grep -oE 'hx-post="/empira/[^"]+/login"' "$OUT.0.html" | head -1 | cut -d'"' -f2)
+B=http://localhost:8000
 
-# an action round trip — a wrong password must re-render the form
-curl -s -b "$JAR" -c "$JAR" -o "$OUT.1.html" -w 'POST action   %{http_code}\n' \
-  -X POST "http://127.0.0.1:8080$ACTION" -H 'HX-Request: true' -H "X-CSRF-Token: $CSRF" \
-  --data-urlencode 'email=nobody@example.com' --data-urlencode 'password=wrong'
-grep -c 'did not match' "$OUT.1.html"    # must be 1
+curl -s -o "$OUT".home.html -w 'home          %{http_code}\n' "$B/"
+curl -s -o /dev/null -w 'unknown url   %{http_code}\n' "$B/nope"
+curl -s -o /dev/null -w 'src reachable %{http_code}\n' "$B/src/App.php"
+curl -s -o /dev/null -w 'dotenv        %{http_code}\n' "$B/.env"
 
-# a fragment must not contain the document
-TARGET=$(grep -oE 'id="region-[a-z]+"' "$OUT.0.html" | head -1 | cut -d'"' -f2)
-curl -s -b "$JAR" -o "$OUT.2.html" http://127.0.0.1:8080/login \
-  -H 'HX-Request: true' -H "HX-Target: $TARGET"
-grep -c '<html' "$OUT.2.html"        # must be 0
-
-# the gates — these SHOULD fail
-curl -s -o /dev/null -w 'forged token %{http_code}\n' \
-  -X POST 'http://127.0.0.1:8080/empira/AAAA.BBBB/login' -H 'HX-Request: true'
-curl -s -o /dev/null -w 'no csrf     %{http_code}\n' \
-  -X POST "http://127.0.0.1:8080$ACTION" -H 'HX-Request: true'
-curl -s -o /dev/null -w 'guest dash  %{http_code}\n' http://127.0.0.1:8080/dashboard
-curl -s -o /dev/null -w 'unknown url %{http_code}\n' http://127.0.0.1:8080/nope
-
-# nothing outside public/ is a document
-curl -s -o /dev/null -w 'src reachable %{http_code}\n' http://127.0.0.1:8080/src/App.php
+# an htmx request must get the region, not the document
+TARGET=$(grep -oE 'id="region-[a-z]+"' "$OUT".home.html | head -1 | cut -d'"' -f2)
+curl -s -o "$OUT".frag.html -H 'HX-Request: true' -H "HX-Target: $TARGET" "$B/"
+grep -c '<html' "$OUT".frag.html          # must be 0
 ```
 
-Expected: `200`, `200`, error `1`, fragment `0`, forged `403`, no-csrf `403`,
-guest dashboard `302`, unknown `404`, `src` `404`.
+Expected: `200`, `404`, `404`, `404`, and `0`.
 
-`/login` is used because a guest can reach it, so no session is needed — and
-because it exercises the same thing the old `Counter` check did: a
-CSRF-protected component action, round-tripped through a real server.
+Three things that are easy to get wrong here:
 
-The two `403`s come from different places and it is worth knowing which is
-which. A **forged token** fails the HMAC in `TokenCodec`. A **missing token**
-fails `Csrf::verify()` inside `Component::beforeAction()`, which throws
-`ForbiddenActionException`. The `419` belongs to `VerifyCsrfToken`, the
-middleware for ordinary route posts — and the demo app does not register it
-globally, so you will not see a `419` here. If you ever do, something *is*
-registered globally.
+- **`.env` is a `404`, not a `403`.** `php -S` has no dotfile rule, so the request
+  reaches the front controller. It is still not served — `.env` sits outside
+  `public/` — but any document quoting `403` was written against nginx.
+- **`src/App.php` is a `404`** because only `public/` is a document root. If that
+  ever answers `200`, the front controller is serving source.
+- **`composer serve` binds `0.0.0.0`**, so it is answering on this machine's
+  network address as well as loopback, serving the placeholder secret. That is
+  fine on a private network and not fine on a shared one; `--host=127.0.0.1` if in
+  doubt.
 
-**Keep the cookie jar.** Without it each request gets a fresh session and a fresh
-CSRF token, which looks exactly like a broken guard.
-
-### 5. The session-isolation check
-
-The one that catches the bug class that matters. It runs at the **real default**,
-2 × CPU workers, because that is what ships — but read this before trusting a
-green result.
-
-**A green run is not proof of isolation.** A per-worker state leak only shows
-itself when two consecutive requests for one session land on the *same* worker,
-which at 32 workers is about 1 chance in 32. Ten rounds catch roughly a quarter
-of such a bug; they do not eliminate it. Anything that would fail here
-intermittently in production will usually pass here.
-
-When a state bug is suspected, make this check deterministic:
+Stop it when you are done:
 
 ```bash
-cd app && FRANKENPHP_WORKERS=1 docker compose up -d --force-recreate --wait && cd ..
+lsof -ti:8000 | xargs -r kill
+rm -f tmp/verify.*
 ```
 
-One worker makes every request share a process, so a leak cannot hide.
+### 5. What this no longer covers
 
-```bash
-JAR=tmp/verify-session.txt && rm -f "$JAR"
-B=http://127.0.0.1:8080
+The step that used to sit here ran against a demo application: a sign-in form, a
+dashboard, a forged component token, a missing CSRF header, and ten rounds of
+session isolation across workers. **`app/` has one route.** There is no `/login`,
+no `/dashboard` and no component to forge a token for, so none of that could be
+curled — before this pass it also needed a container that no longer exists.
 
-PAGE=$(curl -s -c "$JAR" "$B/login")
-TOKEN=$(printf '%s' "$PAGE" | grep -oE 'X-CSRF-Token&quot;:&quot;[a-f0-9]+' | head -1 | grep -oE '[a-f0-9]{40,}')
-URL=$(printf '%s' "$PAGE" | grep -oE 'hx-post="/empira/[^"]+/login"' | head -1 | cut -d'"' -f2)
+The coverage moved rather than vanished:
 
-curl -s -o /dev/null -b "$JAR" -c "$JAR" -X POST "$B$URL" \
-  -H 'HX-Request: true' -H "X-CSRF-Token: $TOKEN" \
-  --data-urlencode 'email=ada@example.com' \
-  --data-urlencode 'password=correct horse battery staple'
+| What | Where it is now |
+|---|---|
+| CSRF on component actions, forged tokens | `principle/tests/ActionTest.php`, `TokenCodecTest.php` |
+| session lifecycle, the guard, login | `auth/tests` |
+| per-request resets in a long-lived process | `principle/tests/WorkerTest.php` |
 
-for i in $(seq 1 10); do
-  a=$(curl -s -b "$JAR" -o /dev/null -w '%{http_code}' "$B/dashboard")
-  b=$(curl -s -o /dev/null -w '%{http_code}' "$B/dashboard")
-  echo "round $i   signed-in:$a   anonymous:$b"
-done
-```
-
-Expected: `signed-in:200   anonymous:302`, ten times. Anything else — and in
-particular a `200` for the anonymous request — is one visitor being served
-another's session, which is the failure this whole gate exists to catch.
-
-Tear down:
-
-```bash
-cd app && docker compose down && cd ..
-rm -f tmp/verify-jar.txt tmp/verify-session.txt tmp/verify.*.html
-```
-
-Leave `tmp/.boot.lock` alone — it is the SQLite boot lock sitting beside the
-database it guards, not a leftover.
+What genuinely **cannot** be checked in this workspace is worker mode: it needs a
+FrankenPHP binary, and nothing here runs one. That is recorded as unrun, by
+decision, in CHECKLIST §5 — not as an oversight to fix quietly.
 
 ## Rebuilding
 
-There is nothing to rebuild. The application runs on stock `nginx:alpine` and
-`php:8.4-fpm-alpine` with the workspace bind-mounted, so no image is built and
-no `Dockerfile` or entrypoint exists to change.
+Nothing, because there is nothing to build. The suite runs on the host PHP, the
+application is served by `php -S`, and this workspace ships no image, no compose
+file and no entrypoint.
 
 The only thing that needs re-running is a dependency install:
 
 - a `composer.json` in either package — dependencies or an autoload path
 - the first run on a fresh clone
 
-Everything else — any PHP file under either package — is mounted and watched. If
-you find yourself reaching for `docker compose up --build`, something is wrong
-with the mounts, not with your change.
+After that a PHP edit is an edit in the next run. If you find yourself reaching
+for a build step, you are looking for a step this workspace does not have.
 
 ## Prove the test can fail
 

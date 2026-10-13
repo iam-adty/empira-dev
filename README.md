@@ -110,13 +110,13 @@ degradation is only safe if it is known to be one.
 ## Commands
 
 ```bash
-cd principle && composer test    # 485 tests, in Docker against PostgreSQL
+cd principle && composer test    # 483 tests, SQLite on the host
 cd auth      && composer test    # 37 tests, SQLite
 cd frankenphp && composer test   # 14 tests, SQLite
 dev/tools/app-test check         # 17 tests, in the generated app-test/
 ```
 
-And three checks, none of which need Docker:
+And three checks, none of which need anything running:
 
 ```bash
 dev/tools/module-contract        # every package shaped like its role

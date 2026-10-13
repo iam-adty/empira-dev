@@ -5,7 +5,7 @@
 > a bug.
 
 Framework: `iam-adty/empira-principle` · app: `iam-adty/empira-app`
-Current: **485 framework tests / 1087 assertions**, **37 auth tests / 71 assertions**, **14 frankenphp tests / 24 assertions**, **17 app-test tests / 31 assertions** (in the generated `app-test/`, not in `app/`).
+Current: **483 framework tests / 1082 assertions**, **37 auth tests / 71 assertions**, **14 frankenphp tests / 24 assertions**, **17 app-test tests / 31 assertions** (in the generated `app-test/`, not in `app/`).
 
 ---
 
@@ -449,6 +449,38 @@ framework is supposed to make easy: a package shipping its own command.
   ledger — is correct and covered by `testTheModuleContributesItsMigrations`,
   `testTheMigrationNamespaceMatchesTheFilesThatDeclareIt` and the scratch app's
   `testTheModuleBroughtItsTableWithIt`.
+
+### 11. SQLite only, and no containers — 2026-10-13
+
+Removed by decision. Doctrine is untouched: DBAL opens the connection, ORM maps
+and queries it, Migrations plans against it.
+
+- ~~`PostgresTest` deleted~~ — five tests, the only ones in the suite that
+  reached a database over a socket. **A green run now proves Doctrine works
+  against SQLite and nothing more.** "SQLite forgives a great deal" is why they
+  existed, and it is still true of what is left.
+- ~~`DatabaseConfig` speaks SQLite only~~ — the mysql and pgsql mappings went,
+  and with them the `host`, `port`, `username` and `password` parameters, which
+  existed only to reach a server and would otherwise be published and ignored.
+  `DB_DRIVER=pgsql` is refused **by name**: falling back would be worse, because
+  SQLite would create an empty file and the application would report having no
+  data.
+- ~~`tools/test` runs on the host~~ — a daemon, an image and a container per run
+  were being spent on 480 tests that open a file. The suite is 483 tests in 0.7s
+  with nothing started. **The early-exit check is unchanged and re-proved**: bare
+  `phpunit` returns 0 on a truncated run; `tools/test` returns 1 and says why.
+- ~~Every container artifact deleted~~ — `principle/{Dockerfile,docker-compose.yml,.dockerignore}`,
+  `app/docker-compose.yml`, `app/docker/nginx.conf`, and the orphaned workspace
+  `.dockerignore`. The three sharp edges they needed comments for — `pdo_pgsql`
+  needing a `-d` flag on the SAPI, compose interpolating `$var`, nginx resolving
+  an upstream before Docker registered it — were sharp because of the stack.
+- ~~`GET /.env` is a `404`, not a `403`~~ — `php -S` has no dotfile rule, so the
+  request reaches the front controller. Still not served: `.env` is outside
+  `public/`. Recorded because documents quoted the old status.
+- ~~The verify skill's live check was rewritten~~ — it curled `/login` and
+  `/dashboard`, routes the skeleton lost when the demo was stripped, on a
+  container that no longer existed. That coverage now lives in
+  `principle/tests/{ActionTest,TokenCodecTest,WorkerTest}` and `auth/tests`.
 
 ---
 

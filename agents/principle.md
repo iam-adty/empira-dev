@@ -1,6 +1,6 @@
 # AGENTS.md
 
-> **Status: describes shipped code.** Current behaviour, verified against `485 tests, 1087 assertions`.
+> **Status: describes shipped code.** Current behaviour, verified against `483 tests, 1082 assertions`.
 > Intended-but-unbuilt work lives in [../planning/SPEC.md](../planning/SPEC.md), marked `[planned]`.
 
 Guidance for AI agents and new contributors working in the Empira framework.
@@ -35,33 +35,21 @@ find src tests -name '*.php' -print0 | xargs -0 -n1 php -l   # lint sweep
 php bin/empira list                              # the console
 php bin/empira make:component Counter            # generators write to src/components
 php bin/empira route:list                        # routes an app registers
-
-docker compose exec php php bin/empira list      # the same, inside the container
 ```
 
-**The test suite is the only gate** — `composer test` runs it, in Docker,
-against a real PostgreSQL. There is no CI: neither repository has a remote, and
+**The test suite is the only gate** — `composer test` runs it, on the host PHP,
+in about a second. There is no CI: the repositories have no remote runner, and
 GitHub Actions only executes for a repository hosted on GitHub.
 
-`tools/test` starts the database if it is down and **refuses to run** if it
-cannot — a suite that quietly skipped the driver tests is a green tick that
-proves nothing. It also refuses a run that **finished early**: PHPUnit's own exit
-status cannot report truncation, so the script checks that a summary line was
-printed. That check is why `composer test` means what it says — read
+`tools/test` refuses to run **at all** if the host PHP has no `pdo_sqlite`, and it
+refuses to accept a run that **finished early**: PHPUnit's own exit status cannot
+report truncation, so the script checks that a summary line was printed. That
+check is why `composer test` means what it says — read
 [`Fixed`](#fixed--do-not-reintroduce) for the measurement behind it.
 
-**The `php` service is not the gate.** `tools/test` runs the suite in its own
-`--rm` container named `empira-principle`, and *that* output is what
-`composer test` checks. The `php` service is the thing you `exec` into; it idles.
-So:
-
-- `docker compose ps` showing `php` **running** means a container is open, not
-  that a suite passed.
-- `docker compose logs php` shows whatever that container last did. It used to
-  run the suite on every `up` and exit, so its logs could show a failure from
-  long before your working tree — and it sat at `exited (2)`, which reads like
-  a red build. Read the commit history or re-run the suite instead.
-- Only `composer test` decides whether anything passed.
+There is no container and no database server, and `composer test` is the only
+thing that decides whether anything passed. There is nothing else that could
+report a green tick.
 
 ## Where things live
 
@@ -118,10 +106,8 @@ Break one of these and a component becomes exploitable or silently broken.
   heredoc that rewrites a file. Those have no review step, they fail silently
   when the pattern does not match, and they leave a half-applied file when they
   do. Shell is for *reading* — `grep`, `find`, `git diff`, `php -l`.
-- **Never rebuild to test a code change.** `principle/src` is bind-mounted into
-  both the test runner and the app stack, and the worker watches it. Only a
-  `composer.json` change, a Dockerfile change, or a fresh clone needs
-  `docker compose build`.
+- **Never rebuild anything.** There is nothing to build: the suite runs on the
+  host PHP against SQLite, and an edit to `src/` is an edit in the next run.
 - **Scratch goes in the workspace `tmp/`**, never `/tmp` — it is outside the
   working directory, so every use raises an `external_directory` prompt, and a
   failed run leaves its evidence out of sight.
@@ -144,9 +130,10 @@ Last reviewed: 2026-10-11. These have each cost time in this codebase.
 read `static::OPEN` for its quote character; `self::OPEN` would bind to the base
 class, every dialect would emit backticks, and PostgreSQL would reject them at
 runtime. It looked correct in review and was caught only by running against a
-real server — a unit test asserting on strings would have passed. *The grammar
-is gone now; the lesson is not, and it applies to any hierarchy with a
-subclass-dependent constant.*
+real server — a unit test asserting on strings would have passed. *The grammar is
+gone, the servers are gone, and the lesson is neither: a hierarchy with a
+subclass-dependent constant will hide a `self::` the same way, and a string
+assertion will pass over it.*
 
 **A hand-written quote character is the bug the dialect layer existed to
 prevent.** The aggregate alias was written as ``AS `aggregate` `` straight into
