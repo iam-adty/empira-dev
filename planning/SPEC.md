@@ -242,9 +242,26 @@ Every entry needs a status marker, and a marker has to move. When an item ships:
 1. Flip it to `[shipped]` with the commit.
 2. Move its *behaviour* into [../../principle/ARCHITECTURE.md](../../principle/ARCHITECTURE.md) and the relevant `docs/` page.
 3. Move it into [../../principle/CHANGELOG.md](../../principle/CHANGELOG.md) under `[Unreleased]`.
-4. Delete it from here — a shipped item still listed as planned is worse than no document.
+4. **Keep it here.** The *behaviour* moves out; the *reasoning* stays, because it is
+   the only record of why the code came out this way and what was tried first. §4
+   here is the clearest case: the code is four lines in a `finally`, and the reason
+   it is there at all — that a deferred save loses a sign-in 31 times in 32 under a
+   2 × CPU worker — exists nowhere else. Delete the section and that reasoning goes
+   with it.
 
-A specification that describes software which does not exist is the most expensive kind of documentation to keep.
+This rule used to say *delete it*, and was wrong twice over. It disagreed with
+[CHECKLIST.md](CHECKLIST.md)'s own rule 1 — strike, never delete, because the
+history is why the file is trustworthy — and it was never applied: every section
+here is shipped and none was ever removed. The rule described an intention the file
+had not followed, which is worse than not writing the rule.
+
+What it was *actually* trying to prevent is real. An entry marked `[planned]` whose
+code shipped is the expensive thing, and it happened: §4 built, and then sat marked
+`[planned]` in CHECKLIST.md long after, pointing at an anchor that no longer existed.
+That is the failure to guard against — **a stale marker**, not a surplus section. So
+the marker is the thing to keep honest, and
+[`dev/tools/module-contract`](../tools/module-contract) is the pattern for
+enforcing a rule like that rather than trusting someone to remember it.
 ---
 
 ## 5. Composition and reachability `[shipped]`
