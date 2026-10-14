@@ -1,0 +1,442 @@
+#!/usr/bin/env bash
+#
+# Check that the test counts the documentation quotes are the counts the suites
+# report.
+#
+#     dev/tools/check-baselines
+#
+# ## Why this lives here
+#
+# Eight of them were wrong. `app-test` was quoted as 22 tests in the root
+# `AGENTS.md` and as 19 in `dev/`, from the same workspace, on the same day. And
+# `dev/agents/app.md` said "the suite that ships is 17 tests" in the present
+# tense, which is not history — it was simply out of date, and the oldest of the
+# lot had been wrong for four commits.
+#
+# The verify skill already says the rule: *"If your change adds or removes tests,
+# update that number in every document that quotes it."* That rule was written
+# down and still not followed, which is the same failure `check-links` was
+# written to stop. A rule nobody checks is a rule somebody has to remember, and
+# this one had to be remembered by eight documents at once.
+#
+# ## It runs the suites rather than counting the files
+#
+# The obvious cheaper implementation is to count `public function test` methods.
+# It is wrong. `principle` declares 474 of them and reports **487**, because two
+# are data providers — a 13-test error on the largest suite, and a check that
+# fails loudly and meaninglessly the first time a provider is added. The other
+# four suites happen to agree exactly, which is a coincidence and not a licence:
+# `auth`, `frankenphp` and `debugtools` would pass by luck.
+#
+# So it runs them and parses `OK (N tests, M assertions)`. About five seconds.
+#
+# ## Why it matches shapes rather than counting every "N tests"
+#
+# This workspace documents its own deletions, and it has to keep doing so. Seven
+# of the numbers already in the documentation are genuinely about the past:
+# `CHANGELOG.md`'s "21 of 790 tests", `CHECKLIST.md`'s struck-through "29 tests"
+# and its "480 tests that open a file", `app.md`'s "45 tests to 16". A scanner
+# that matched `\d+ tests` would fail all seven, and the only way to make it
+# pass would be to delete true sentences about why a thing changed — which
+# `check-links` names as the failure mode it would rather miss than cause.
+#
+# So it recognises the three shapes a live baseline actually takes:
+#
+#   * a backticked `N tests, M assertions` group — the status headers
+#   * a trailing `# N tests` comment on a line that invokes a suite
+#   * an inline `N <package> tests / M assertions` pair — the CHECKLIST's
+#     Current line, which carries five in one sentence
+#
+# Everything else is left alone. A claim in some fourth shape is missed rather
+# than wrong, which is the better failure.
+#
+# ## Why `app-test/` degrades instead of failing
+#
+# Building the scratch application is a `git clone` over SSH, so requiring it
+# would make this check depend on a network and a key. When `app-test/` is
+# absent the tool says so and names the baseline it could not verify, rather
+# than failing or passing quietly. The same honesty as the `FRANKENPHP_WORKERS`
+# override `CHECKLIST.md` keeps for a check that cannot be made conclusive.
+
+set -euo pipefail
+
+cd "$(dirname "${BASH_SOURCE[0]}")/../.."
+
+php <<'PHP'
+<?php
+
+declare(strict_types=1);
+
+/** Directory names skipped anywhere in the tree. */
+const SKIP = ['vendor', 'node_modules', '.git', 'app-test'];
+
+/**
+ * Packages with a suite of their own, and how to run it.
+ *
+ * `app-test` is last because it is the only one that may be absent, and
+ * `app/` itself has no suite by decision — its tests live in the scratch
+ * application.
+ */
+const SUITES = [
+    'principle' => 'principle',
+    'auth' => 'auth',
+    'frankenphp' => 'frankenphp',
+    'debugtools' => 'debugtools',
+];
+
+/**
+ * Adjectives the prose uses for a package, where `principle` is "the framework".
+ * `CHECKLIST.md`'s Current line is written this way, and so is `app.md`'s
+ * "the framework's 487 tests".
+ */
+const LABELS = [
+    'framework' => 'principle',
+    'principle' => 'principle',
+    'auth' => 'auth',
+    'frankenphp' => 'frankenphp',
+    'debugtools' => 'debugtools',
+    'app-test' => 'app-test',
+];
+
+// ---------------------------------------------------------------------------
+// Measure
+// ---------------------------------------------------------------------------
+
+/**
+ * Run one suite and read its count.
+ *
+ * A red suite has no baseline. Reporting its numbers would let a failing run
+ * rewrite the documentation to match itself, so a non-zero exit is a failure of
+ * this check rather than a mismatch — hence no null return, only an exit.
+ *
+ * @return array{tests: int, assertions: int}
+ */
+function measure(string $directory, string $command): array
+{
+    $cwd = getcwd();
+
+    if (!is_dir($cwd . '/' . $directory . '/vendor')) {
+        printf(
+            "  \033[31mFAIL\033[0m  %s  no vendor/ — run `composer install` in %s first\n",
+            $directory,
+            $directory
+        );
+        exit(1);
+    }
+
+    chdir($cwd . '/' . $directory);
+    exec($command . ' 2>&1', $output, $status);
+    chdir($cwd);
+
+    $text = implode("\n", $output);
+
+    if ($status !== 0 || preg_match('/^OK \((\d+) tests?, (\d+) assertions?\)$/m', $text, $m) !== 1) {
+        printf("  \033[31mFAIL\033[0m  %s  the suite did not report OK — baseline unverifiable\n", $directory);
+        printf("        %s\n", trim(substr($text, -400)));
+        exit(1);
+    }
+
+    return ['tests' => (int) $m[1], 'assertions' => (int) $m[2]];
+}
+
+$actual = [];
+
+foreach (SUITES as $package => $directory) {
+    $actual[$package] = measure($directory, 'composer test');
+}
+
+// The scratch application is disposable and built over SSH, so it is verified
+// when it is there and named as unverified when it is not.
+$unverified = [];
+
+if (is_dir('app-test')) {
+    $actual['app-test'] = measure('app-test', 'composer test');
+} else {
+    $unverified[] = 'app-test';
+}
+
+// ---------------------------------------------------------------------------
+// Collect the claims
+// ---------------------------------------------------------------------------
+
+/** Every markdown file in the workspace, minus the generated copy. */
+function markdownFiles(): array
+{
+    $files = [];
+
+    $iterator = new RecursiveIteratorIterator(
+        new RecursiveDirectoryIterator('.', FilesystemIterator::SKIP_DOTS)
+    );
+
+    foreach ($iterator as $file) {
+        if (!$file->isFile() || $file->getExtension() !== 'md') {
+            continue;
+        }
+
+        $path = str_replace('\\', '/', $file->getPathname());
+        $path = preg_replace('#^\./#', '', $path);
+
+        foreach (explode('/', $path) as $segment) {
+            if (in_array($segment, SKIP, true)) {
+                continue 2;
+            }
+        }
+
+        $files[] = $path;
+    }
+
+    sort($files);
+
+    return $files;
+}
+
+/**
+ * Logical lines: blockquote continuations joined onto the line they continue.
+ *
+ * The status headers wrap mid-number —
+ *
+ *     > … verified against `38
+ *     > tests, 119 assertions`
+ *
+ * — so matching the raw line finds a number with no noun after it and reports
+ * nothing. Joining first is what lets one regex see the whole claim.
+ *
+ * @return list<array{line: int, text: string}>
+ */
+function logicalLines(string $path): array
+{
+    $lines = [];
+    $last = null;
+
+    foreach (file($path, FILE_IGNORE_NEW_LINES) ?: [] as $index => $line) {
+        $quoted = preg_match('/^>\s?(.*)$/', $line, $m) === 1;
+        $text = $quoted ? $m[1] : $line;
+
+        // Only a line that is itself a blockquote continues one. Joining onto
+        // whatever came before would attribute a header to the blank line above
+        // it and report the wrong line number.
+        if ($quoted && $last !== null && $lines[$last]['quoted']) {
+            $lines[$last]['text'] .= ' ' . $text;
+            continue;
+        }
+
+        $lines[] = ['line' => $index + 1, 'text' => $text, 'quoted' => $quoted];
+        $last = count($lines) - 1;
+    }
+
+    return array_map(
+        static fn (array $l): array => ['line' => $l['line'], 'text' => $l['text']],
+        $lines
+    );
+}
+
+/** The package a file belongs to, by directory, or null if it is workspace-only. */
+function packageOfPath(string $path): ?string
+{
+    $segments = explode('/', $path);
+    $head = $segments[0];
+
+    if (isset(SUITES[$head])) {
+        return $head;
+    }
+
+    // `dev/agents/frankenphp.md` is the agent file for the frankenphp package.
+    if (count($segments) === 3 && $segments[0] === 'dev' && $segments[1] === 'agents') {
+        $stem = basename($path, '.md');
+
+        return isset(SUITES[$stem]) ? $stem : null;
+    }
+
+    return null;
+}
+
+/**
+ * The package the nearest preceding suite invocation names, or null.
+ *
+ * This is how a human reads `` `487 tests, 1089 assertions` is the current
+ * baseline`` in the verify skill: the code block three lines above it says
+ * `cd principle`. The file itself carries no clue.
+ *
+ * @param list<array{line: int, text: string}> $lines
+ */
+function packageFromNearestCommand(array $lines, int $before): ?string
+{
+    for ($i = count($lines) - 1; $i >= 0; $i--) {
+        if ($lines[$i]['line'] >= $before) {
+            continue;
+        }
+
+        if (preg_match('/dev\/tools\/app-test check/', $lines[$i]['text']) === 1) {
+            return 'app-test';
+        }
+
+        if (preg_match('/\bcd\s+(principle|auth|frankenphp|debugtools)\b/', $lines[$i]['text'], $m) === 1) {
+            return $m[1];
+        }
+    }
+
+    return null;
+}
+
+/** @return list<array{file: string, line: int, package: string, kind: string, tests: int, assertions: int|null}> */
+function claimsIn(string $path): array
+{
+    $lines = logicalLines($path);
+    $found = [];
+
+    foreach ($lines as $entry) {
+        $text = $entry['text'];
+        $line = $entry['line'];
+
+        // A struck-through line is history by construction.
+        if (str_contains($text, '~~')) {
+            continue;
+        }
+
+        $add = static function (string $package, string $kind, int $tests, ?int $assertions) use (&$found, $path, $line): void {
+            $found[] = [
+                'file' => $path,
+                'line' => $line,
+                'package' => $package,
+                'kind' => $kind,
+                'tests' => $tests,
+                'assertions' => $assertions,
+            ];
+        };
+
+        // 1. The status headers: a backticked `N tests, M assertions` group.
+        if (preg_match('/`(\d+) tests?, (\d+) assertions?`/', $text, $m) === 1) {
+            $package = packageOfPath($path) ?? packageFromNearestCommand($lines, $line);
+
+            if ($package !== null) {
+                $add($package, 'header', (int) $m[1], (int) $m[2]);
+            }
+        }
+
+        // 2. A trailing comment on a line that invokes a suite.
+        if (preg_match('~(dev/tools/app-test check|cd\s+(principle|auth|frankenphp|debugtools)\b[^#]*composer test)\s*#\s*(.+)$~', $text, $m) === 1) {
+            $package = $m[1] === 'dev/tools/app-test check' ? 'app-test' : $m[2];
+
+            if (preg_match('/(\d+) tests?(?:,\s*(\d+) assertions?)?/', $m[3], $n) === 1) {
+                $add($package, 'comment', (int) $n[1], isset($n[2]) ? (int) $n[2] : null);
+            }
+        }
+
+        // 3. An inline labelled pair: `487 framework tests / 1089 assertions`.
+        if (preg_match_all(
+            '/(\d+)\s+(framework|principle|auth|frankenphp|debugtools|app-test)[\s-]tests?(?:\s*\/\s*(\d+)\s+assertions?)?/i',
+            $text,
+            $all,
+            PREG_SET_ORDER
+        ) > 0) {
+            foreach ($all as $n) {
+                $add(
+                    LABELS[strtolower($n[2])],
+                    'inline',
+                    (int) $n[1],
+                    isset($n[3]) && $n[3] !== '' ? (int) $n[3] : null
+                );
+            }
+        }
+
+        // 4. "the framework's 487 tests" — the label leading the number.
+        if (preg_match_all(
+            '/\b(framework|principle|auth|frankenphp|debugtools|app-test)(?:\'s|s)\s+(\d+)\s+tests?\b/i',
+            $text,
+            $all,
+            PREG_SET_ORDER
+        ) > 0) {
+            foreach ($all as $n) {
+                $add(LABELS[strtolower($n[1])], 'inline', (int) $n[2], null);
+            }
+        }
+    }
+
+    return $found;
+}
+
+// ---------------------------------------------------------------------------
+// Compare
+// ---------------------------------------------------------------------------
+
+$files = markdownFiles();
+$claims = [];
+
+foreach ($files as $path) {
+    $claims = array_merge($claims, claimsIn($path));
+}
+
+$failures = [];
+$checked = 0;
+
+foreach ($claims as $claim) {
+    $measured = $actual[$claim['package']] ?? null;
+
+    if ($measured === null) {
+        continue;
+    }
+
+    $checked++;
+
+    if ($claim['tests'] !== $measured['tests']) {
+        $failures[] = sprintf(
+            '%s:%d  %s claims %d tests, %s reports %d',
+            $claim['file'],
+            $claim['line'],
+            $claim['package'],
+            $claim['tests'],
+            $claim['package'],
+            $measured['tests']
+        );
+
+        continue;
+    }
+
+    if ($claim['assertions'] !== null && $claim['assertions'] !== $measured['assertions']) {
+        $failures[] = sprintf(
+            '%s:%d  %s claims %d assertions, %s reports %d',
+            $claim['file'],
+            $claim['line'],
+            $claim['package'],
+            $claim['assertions'],
+            $claim['package'],
+            $measured['assertions']
+        );
+    }
+}
+
+echo "Documentation baselines\n\n";
+
+foreach ($actual as $package => $measured) {
+    printf(
+        "  %-11s %d tests, %d assertions\n",
+        $package,
+        $measured['tests'],
+        $measured['assertions']
+    );
+}
+
+if ($unverified !== []) {
+    printf(
+        "\n  \033[33mskip\033[0m  %s — no app-test/; run `dev/tools/app-test create` to verify its baseline\n",
+        implode(', ', $unverified)
+    );
+}
+
+foreach ($failures as $failure) {
+    printf("  \033[31mFAIL\033[0m  %s\n", $failure);
+}
+
+printf("\n  %d claim(s) checked across %d file(s).\n", $checked, count($files));
+
+if ($failures !== []) {
+    printf("\n  \033[31m%d problem(s).\033[0m\n", count($failures));
+    exit(1);
+}
+
+printf(
+    "  \033[32mok\033[0m    every quoted count is the count the suite reports\n"
+);
+
+exit(0);
+PHP

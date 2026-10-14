@@ -47,15 +47,21 @@ PHP without the extension and has been missed by `find -name '*.php'` before.
 
 ### 1a. Documentation gates
 
-Run these before the suite. None needs anything running, they finish in seconds,
+Run these before the suite. None needs a server running, they finish in seconds,
 and they catch the failures a green suite cannot — a test suite says nothing about whether
 a document still describes the code.
 
 ```bash
 dev/tools/module-contract              # every package shaped like its role
 dev/tools/check-links                  # links, anchors, and named APIs all exist
+dev/tools/check-baselines              # every quoted test count is the count the suites report
 dev/tools/check-readme-installs        # every README's install snippet works as written
 ```
+
+`check-baselines` is the exception: it **runs** the four library suites, because
+counting `public function test` methods is wrong — `principle` declares 474 and
+reports 487, because two are data providers. It needs `composer install` done in
+each package, and it skips `app-test` when the scratch application is not built.
 
 `check-links` is the one to reach for after editing documentation. It is strict
 on purpose: inside a published package a relative link that escapes that package
@@ -101,6 +107,12 @@ cd principle && composer test
 removes tests, update that number in every document that quotes it** —
 `dev/agents/principle.md`, `dev/planning/CHECKLIST.md`, `principle/ARCHITECTURE.md`, `principle/docs/testing.md`.
 
+`dev/tools/check-baselines` now enforces that rather than trusting you to remember
+it, which is the point: this rule was written down while eight of its numbers went
+stale anyway, and `app-test` was quoted as 22 in one document and 19 in another.
+It recognises the three shapes a live baseline takes, so a number written in some
+other shape is missed rather than wrongly flagged.
+
 Faster loops — no rebuild, the source is mounted:
 
 ```bash
@@ -110,9 +122,9 @@ vendor/bin/phpunit --filter=testACycle
 composer test -- --filter=testACycle
 ```
 
-### 3. The other two suites
+### 3. The other three suites
 
-Both are plain PHPUnit on SQLite. The auth module is a
+All are plain PHPUnit on SQLite. The auth module is a
 separate package with its own gate, and it is the one that proves the module
 contract end to end.
 
@@ -120,7 +132,8 @@ contract end to end.
 cd auth && composer test          # 37 tests, 71 assertions
 cd auth && composer validate      # must be clean
 cd app  && composer validate      # must be clean — app/ has no suite of its own
-dev/tools/app-test check          # 19 tests, 35 assertions — the generated app-test/
+cd debugtools && composer test    # 38 tests, 119 assertions
+dev/tools/app-test check          # 25 tests, 51 assertions — the generated app-test/
 ```
 
 A change to `principle/src/Security/` or to the module contract is not finished
@@ -246,6 +259,7 @@ produce.**
 ```bash
 dev/tools/module-contract
 dev/tools/check-links
+dev/tools/check-baselines
 dev/tools/check-readme-installs
 cd principle && composer test
 cd auth && composer test

@@ -5,7 +5,7 @@
 > a bug.
 
 Framework: `iam-adty/empira-principle` · app: `iam-adty/empira-app`
-Current: **487 framework tests / 1089 assertions**, **37 auth tests / 71 assertions**, **14 frankenphp tests / 24 assertions**, **19 app-test tests / 35 assertions** (in the generated `app-test/`, not in `app/`).
+Current: **487 framework tests / 1089 assertions**, **37 auth tests / 71 assertions**, **14 frankenphp tests / 24 assertions**, **38 debugtools tests / 119 assertions**, **25 app-test tests / 51 assertions** (in the generated `app-test/`, not in `app/`).
 
 ---
 
@@ -582,6 +582,41 @@ Found along the way, in the harness rather than in the plan:
 unconditionally, so the suite was green only on the first run after a `reset` and
 failed on every run after with a constraint violation that said nothing about
 entity mapping. It clears the row first now.
+
+### 14. The quoted baselines are checked — 2026-10-14
+
+- ~~`dev/tools/check-baselines`~~ — a fourth guard. It runs the four library
+  suites, parses `OK (N tests, M assertions)`, and diffs that against every
+  baseline the documentation quotes. **38 claims across 35 files.**
+- ~~The nine wrong numbers corrected~~ — `app-test` was quoted as 22 tests in the
+  root `AGENTS.md` and 19 in `dev/`, from one workspace, on one day; debugtools as
+  13, when it had been 38 since `f6db450`; and `dev/agents/app.md` said "the suite
+  that ships is 17 tests" in the present tense, which was simply out of date.
+- ~~Three lists were missing debugtools~~ — `dev/README.md`, `agents/workspace.md`
+  and this file's Current line enumerated four suites when five exist, and
+  `agents/debugtools.md` was the only package agent file with no status header.
+- ~~`debugtools` added to `check-links`'s `PACKAGES`~~ — it was a published package
+  that `module-contract` checked and `check-links` did not, so the rule that a
+  package's relative links must not escape it was never applied to it. Already
+  conformant, so this closed a gap rather than opening a failure.
+
+**Two things the implementation had to get right, and one it had to give up.**
+
+It runs the suites rather than counting `public function test` methods, because
+`principle` declares 474 of them and reports **487** — two are data providers, a
+13-test error on the largest suite. The other four agree exactly, which is a
+coincidence and not a licence.
+
+It matches the *shapes* a live baseline takes rather than every `\d+ tests`,
+because seven of the numbers in these documents are genuinely about the past and a
+broader scanner fails all seven. The only way to make it pass would be to delete
+true sentences about why a thing changed — the failure `check-links` names as one
+it would rather miss than cause. So a claim in an unrecognised shape is missed
+rather than wrong.
+
+It skips `app-test` rather than failing when the scratch application is absent,
+because building it is a `git clone` over SSH. It names the baseline it could not
+verify (32 claims checked instead of 38) instead of passing quietly.
 
 ---
 

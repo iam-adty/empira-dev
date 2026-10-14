@@ -69,8 +69,15 @@ declare(strict_types=1);
 
 $root = getcwd();
 
-/** Repositories that publish their markdown to consumers. */
-const PACKAGES = ['principle', 'auth', 'frankenphp', 'app'];
+/**
+ * Repositories that publish their markdown to consumers.
+ *
+ * `debugtools` was missing here for as long as the package existed, so the rule
+ * that a published package's relative links must not escape it was never applied
+ * to it. `module-contract` already checks its shape, which is how the two lists
+ * drifted apart. A package added later has to be added here too.
+ */
+const PACKAGES = ['principle', 'auth', 'frankenphp', 'debugtools', 'app'];
 
 /** Directory names skipped anywhere in the tree. */
 const SKIP = ['vendor', 'node_modules', '.git', 'app-test'];

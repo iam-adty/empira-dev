@@ -1,5 +1,8 @@
 # AGENTS.md
 
+> **Status: describes shipped code.** Current behaviour, verified against `38
+> tests, 119 assertions`.
+
 Guidance for `debugtools/` — `iam-adty/empira-debug-tools`, request profiling for
 an Empira application, backed by [Clockwork](https://github.com/itsgoingd/clockwork).
 

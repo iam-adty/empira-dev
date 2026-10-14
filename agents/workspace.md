@@ -122,18 +122,26 @@ cd auth && composer test               # 37 tests
 # worker mode — SQLite
 cd frankenphp && composer test         # 14 tests
 
+# request profiling — SQLite
+cd debugtools && composer test         # 38 tests
+
 # the application — SQLite, and not in app/:
-dev/tools/app-test check               # 19 tests, in the generated app-test/
+dev/tools/app-test check               # 25 tests, in the generated app-test/
 ```
 
-And three checks, none of which need anything running — run these before claiming
+And four checks, none of which need a server running — run these before claiming
 something works, because they catch what a green suite cannot:
 
 ```bash
 dev/tools/module-contract              # every package shaped like its role
 dev/tools/check-links                  # links, anchors, and named APIs all exist
+dev/tools/check-baselines              # every quoted test count is the count the suites report
 dev/tools/check-readme-installs        # every README's install snippet works as written
 ```
+
+`check-baselines` is the odd one out: it runs the four library suites, so it needs
+`composer install` done in each of them, and it skips `app-test` rather than failing
+when the scratch application has not been built.
 
 Scratch files belong in the workspace `tmp/`, never `/tmp`. It sits above every
 package, so one relative path — `dirname(__DIR__, 2) . '/tmp'` — finds it from any

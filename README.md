@@ -115,16 +115,21 @@ degradation is only safe if it is known to be one.
 cd principle && composer test    # 487 tests, SQLite on the host
 cd auth      && composer test    # 37 tests, SQLite
 cd frankenphp && composer test   # 14 tests, SQLite
-dev/tools/app-test check         # 19 tests, in the generated app-test/
+cd debugtools && composer test   # 38 tests, SQLite
+dev/tools/app-test check         # 25 tests, in the generated app-test/
 ```
 
-And three checks, none of which need anything running:
+And four checks, none of which need a server running:
 
 ```bash
 dev/tools/module-contract        # every package shaped like its role
 dev/tools/check-links            # links, anchors, and named APIs all exist
+dev/tools/check-baselines        # every quoted test count is the count the suites report
 dev/tools/check-readme-installs  # every README's install snippet works as written
 ```
+
+`check-baselines` runs the four library suites, so it needs `composer install` done in
+each of them, and it skips `app-test` when the scratch application has not been built.
 
 `dev/` has no build and no test suite. It holds instructions about the code — and
 the exception is `dev/tools/`, which is executable on purpose. Those four scripts
