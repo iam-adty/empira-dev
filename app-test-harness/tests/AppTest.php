@@ -190,6 +190,26 @@ final class AppTest extends TestCase
         self::assertStringNotContainsString('<html', $body, 'a fragment should not carry the document');
     }
 
+    /**
+     * htmx is served from this application's own `public/`, not a CDN.
+     *
+     * Nothing else in the suite would notice if that regressed: the markup
+     * would still be a correct `<script src>`, just pointing at someone else's
+     * server on every page load. So it is asserted here, where the skeleton is
+     * what is under test.
+     */
+    public function testHtmxIsServedLocallyRatherThanFromACdn(): void
+    {
+        $body = App::boot()->handle(new Request('GET', '/'))->body();
+
+        self::assertStringContainsString('src="/htmx.min.js"', $body);
+        self::assertStringNotContainsString(
+            'unpkg.com',
+            $body,
+            'the skeleton still points at the CDN, so every page load depends on a third party',
+        );
+    }
+
     public function testUnknownRoutesAre404(): void
     {
         self::assertSame(404, App::boot()->handle(new Request('GET', '/nope'))->status());

@@ -116,7 +116,7 @@ cd principle && composer test    # 487 tests, SQLite on the host
 cd auth      && composer test    # 37 tests, SQLite
 cd frankenphp && composer test   # 14 tests, SQLite
 cd debugtools && composer test   # 38 tests, SQLite
-dev/tools/app-test check         # 25 tests, in the generated app-test/
+dev/tools/app-test check         # 26 tests, in the generated app-test/
 ```
 
 And four checks, none of which need a server running:

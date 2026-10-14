@@ -133,7 +133,7 @@ cd auth && composer test          # 37 tests, 71 assertions
 cd auth && composer validate      # must be clean
 cd app  && composer validate      # must be clean — app/ has no suite of its own
 cd debugtools && composer test    # 38 tests, 119 assertions
-dev/tools/app-test check          # 25 tests, 51 assertions — the generated app-test/
+dev/tools/app-test check          # 26 tests, 53 assertions — the generated app-test/
 ```
 
 A change to `principle/src/Security/` or to the module contract is not finished

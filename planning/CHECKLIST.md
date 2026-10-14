@@ -5,7 +5,7 @@
 > a bug.
 
 Framework: `iam-adty/empira-principle` · app: `iam-adty/empira-app`
-Current: **487 framework tests / 1089 assertions**, **37 auth tests / 71 assertions**, **14 frankenphp tests / 24 assertions**, **38 debugtools tests / 119 assertions**, **25 app-test tests / 51 assertions** (in the generated `app-test/`, not in `app/`).
+Current: **487 framework tests / 1089 assertions**, **37 auth tests / 71 assertions**, **14 frankenphp tests / 24 assertions**, **38 debugtools tests / 119 assertions**, **26 app-test tests / 53 assertions** (in the generated `app-test/`, not in `app/`).
 
 ---
 
@@ -646,6 +646,38 @@ verify (32 claims checked instead of 38) instead of passing quietly.
   the same worker — about 1 in 32. Ten rounds catch roughly a quarter of such a
   bug. Re-run the check with `FRANKENPHP_WORKERS=1` whenever a state bug is
   suspected; the override is kept for exactly that.
+
+### 15. htmx is served from `public/`, not a CDN — 2026-10-14
+
+- ~~`app/public/htmx.min.js` committed~~ — htmx 2.0.4, 50 KB, byte-identical
+  to upstream (`e209dda5c8235479f3166defc7750e1dbcd5a5c1808b7792fc2e6733768fb447`).
+  Every page load used to fetch it from `unpkg.com`, putting a third party in
+  front of the page and handing one a visitor's IP, referrer and timing.
+- ~~`app/public/htmx.LICENSE` records the version and that hash~~ — beside the
+  file rather than inside it, so the asset stays byte-identical and two upgrades
+  stay diffable. htmx is **Zero-Clause BSD**, so vendoring carries no
+  attribution obligation; the file says so rather than leaving it to be assumed.
+- ~~`SiteLayout::htmxUrl()` overridden~~ — the override point already existed;
+  nothing was added to the framework. **`Layout::htmxUrl()`'s default stays the
+  CDN on purpose**, because a library cannot know where an application keeps its
+  webroot, and defaulting to a local path would 404 for anyone who did not
+  install from the skeleton.
+- ~~A test asserts the script is local~~ — nothing else in the suite would notice
+  a regression, since the markup would still be a correct `<script src>` pointing
+  at somebody else's server. Confirmed by reverting the override and watching it
+  fail.
+
+**What changes for whoever upgrades it.** Pinning by URL meant a one-line edit;
+a committed file means a snapshot in git history and a visible diff on upgrade.
+Reviewable and revertible, which is the better trade, but it is a real change in
+how the bump happens. SRI goes away — `integrity` guards against a compromised
+CDN, and self-hosting is the fix rather than a mitigation of that.
+
+**The gap this walked into, unchanged.** `app-test/` builds from `app/`'s
+GitHub *clone*, so the first run of the new test failed — the working tree had
+the change and the clone did not. Committing to `app/` first is the only way in,
+the same constraint §9 records: a change to `app/` is uncovered until it is
+pushed.
 
 ---
 
