@@ -106,16 +106,19 @@ final class BootContractTest extends TestCase
             App::boot()->routes()->all(),
         );
 
-        // The API route, not `/_clockwork` itself. The module serves no page —
-        // nothing is injected into a response and no JavaScript ships — so the
-        // data endpoint is the whole of what it publishes, and that is what has
-        // to be missing when it is off.
+        // The data endpoint, which is the whole of what this module publishes. It
+        // shares the `/__clockwork` prefix with the asset route and has no `/api`
+        // segment, so the exact pattern is what has to be checked — a substring
+        // assertion would pass for either route. The module serves no page —
+        // nothing is injected into a response and no JavaScript ships — so that
+        // endpoint is all there is, and it is what has to be missing when off.
         self::withoutProfiler(function () use ($patterns): void {
-            self::assertNotContains('/_clockwork/api', $patterns());
+            self::assertNotContains('/__clockwork', $patterns());
         });
 
         self::withProfiler(function () use ($patterns): void {
-            self::assertContains('/_clockwork/api', $patterns());
+            self::assertContains('/__clockwork', $patterns());
+            self::assertContains('/__clockwork/{id:[0-9-]+|latest}', $patterns());
         });
     }
 

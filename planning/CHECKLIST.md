@@ -5,7 +5,7 @@
 > a bug.
 
 Framework: `iam-adty/empira-principle` · app: `iam-adty/empira-app`
-Current: **490 framework tests / 1103 assertions**, **37 auth tests / 71 assertions**, **14 frankenphp tests / 24 assertions**, **38 debugtools tests / 119 assertions**, **26 app-test tests / 53 assertions** (in the generated `app-test/`, not in `app/`).
+Current: **490 framework tests / 1103 assertions**, **37 auth tests / 71 assertions**, **14 frankenphp tests / 24 assertions**, **39 debugtools tests / 123 assertions**, **26 app-test tests / 54 assertions** (in the generated `app-test/`, not in `app/`).
 
 ---
 
@@ -153,6 +153,28 @@ core to feature — and a dependency that runs inward is one that cannot be cut.
 ## Next
 
 In priority order. See [SPEC.md](SPEC.md) for the design behind each.
+
+### Outstanding, decided but not started
+
+Recorded here rather than left in a session transcript. Each is a decision that
+has already been made — none needs deciding again, only doing.
+
+- **`franzl/studio` in `app-test/`.** Approved — the profiler UI as a Composer
+  dependency is worth trying. Needs a spike first: last release 0.16.0, October
+  2022, so confirm it still runs against Clockwork 5.x before designing anything.
+  `studio.json` shape is `{"version":2,"paths":[…]}`. It belongs in `app-test/`
+  only — **`app/` stays a bare `composer create-project` skeleton.**
+- **`dev/tools/check-console`.** A subprocess test for the console. The
+  subprocess part is wanted; **browser tests were cancelled and are not to be
+  added.** §17 records the gap this fills.
+- **An `app-test` staleness guard.** Nothing fails when `app-test/` is older than
+  the libraries it installs, and it is easy to read a stale suite as a passing
+  one — this session hit exactly that: a 26/26 that meant nothing because
+  `tools/app-test build` is not a subcommand, so the build silently no-opped and
+  the suite ran against `b8cedbb5`. `reset` is the real verb.
+- **SPEC §7, navigation as an SPA** — parked since early on, and deliberately
+  unimplemented: `app/` ships a skeleton, and an SPA shell is not a skeleton. The
+  draft is outside the repositories, in the session plan directory.
 
 ### 1. Attribute routing `[shipped]` — 2026-10-11
 - ~~`Attributes/Route.php` — `TARGET_CLASS|TARGET_METHOD|IS_REPEATABLE`~~
@@ -807,7 +829,65 @@ ships no HTML and no JavaScript. The Clockwork Chrome extension needs only the
 `X-Clockwork-*` headers and `/_clockwork/api/{id}`, and both were verified
 reachable on loopback and on this machine's network address.
 
+> Superseded by [§20](#20-clockworks-own-url-shape--2026-10-16) two days
+> later: the paths are `/__clockwork` and `/__clockwork/{id}`. Left as written,
+> because it was true when it was written.
+
 ---
+
+### 20. Clockwork's own URL shape — 2026-10-16
+
+- ~~`DebugController::PATH` is `/__clockwork`~~ — data is served at
+  `/__clockwork/{id}` rather than `/_clockwork/api/{id}`, and
+  `X-Clockwork-Path` reads `/__clockwork`.
+- ~~Route ids constrained to `[0-9-]+|latest`~~ — load-bearing, not decorative.
+- ~~`DebugController::API` removed~~ — it named a segment that stopped existing.
+- ~~`debugtools/CHANGELOG.md` added~~ — `principle` was the only package with one.
+- ~~`BootContractTest` asserts the exact patterns~~ — `/__clockwork` **and**
+  `/__clockwork/{id:[0-9-]+|latest}`. A substring assertion would have passed for
+  the asset route, which shares the prefix.
+- ~~`testAnAssetPathIsNotSwallowedByTheIdRoute`~~ — **verified to fail** when the
+  constraint is removed. The status alone cannot catch it, because an unknown id
+  404s too; the content type is what distinguishes the two handlers.
+
+**Two divergences, not one, and the second was the one that mattered.** The
+prefix was `/_clockwork`; the data also hung off an `/api` segment Clockwork has
+never had. The old shape was self-consistent and worked for a client reading
+`X-Clockwork-Path` — but Clockwork's shipped JavaScript treats that header as an
+*override* and otherwise constructs `/__clockwork/…` itself, which 404'd. Renaming
+the prefix alone would have produced `/__clockwork/api/{id}`, still missing a
+client expecting `/__clockwork/{id}`. Verified against installed Clockwork 5.3.5
+rather than from memory: its Laravel provider registers four routes and none has
+an `/api` segment.
+
+Dropping `/api` reintroduced a collision it had been hiding by accident:
+`/__clockwork/app/foo.js` matches `{id}` with `id = app`, and the asset route
+becomes unreachable. `[0-9-]+|latest` is Clockwork's own shape — its Slim
+middleware uses the same expression — and the framework splices
+`{name:constraint}` in verbatim (`principle/src/Routing/Route.php:189`), so no
+framework change was needed.
+
+A test **asserted the old divergence as a requirement**:
+`testThePathHeaderNamesTheApiBaseRatherThanThePrefix` asserted the header was
+*not* the prefix. It was rewritten rather than mechanically updated, because the
+premise inverted.
+
+`DebugController`'s docblock justified the divergence — *"The same family is
+reproduced under `PATH` so the prefix can be ours."* Choosing our own prefix was
+the intent, and this gives it up, so the comment now says why rather than leaving
+a rationale for the opposite decision.
+
+**Verified live**, not only in tests: `X-Clockwork-Path: /__clockwork`;
+`/__clockwork/{id}` → `200 application/json` and the returned `id` matches the
+requested one; `/__clockwork/app/assets/index-159S-Gz-.js` → `200
+application/javascript`, 522 KB; `/__clockwork/app/foo.js` → `404` from the asset
+handler, not from `{id}`; `latest` and `/previous/5` → `200`. Baselines moved to
+**39 debugtools tests / 123 assertions** and **26 app-test / 54**.
+
+**Not automated.** The Clockwork Chrome extension is the one consumer that
+ignores the header fallback path, so it is the only check that proves the
+client-ignores-header case resolves. No browser is installed here; that check is
+still owed.
 
 ---
 
