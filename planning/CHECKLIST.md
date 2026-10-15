@@ -782,6 +782,33 @@ records why the secret is required in every environment, which a loopback
 default does not weaken. Rewriting a historical entry because a default moved is
 the thing this file's own rules exist to prevent.
 
+### 19. `app-test serve` goes through the console — 2026-10-15
+
+- ~~The harness's `serve` script is `./vendor/bin/empira serve --port=8001`~~ —
+  it was `php -S localhost:8001 -t public public/index.php`, a raw server that
+  bypassed the console entirely.
+- ~~`dev/tools/app-test serve` forwards options after `--`~~ — so
+  `serve -- --host=0.0.0.0` reaches the console, and a forwarded `--port` beats
+  the script's.
+
+**Why it mattered.** Loopback on 8001 is right, and the port is separate from the
+skeleton's 8000 on purpose. But a raw `php -S` binds `localhost` and nothing
+else, and **a command line cannot be widened after the fact** — `composer serve
+-- --host=0.0.0.0` was silently ignored, because PHP's built-in server does not
+take its arguments in that position. Serving the scratch application from WSL and
+reaching it from a Windows browser was not possible through this tool, and
+nothing said so.
+
+It is now the same console the skeleton uses, and the console prints both
+addresses — which is where the network address becomes visible at all.
+
+**Still no dashboard.** `/_clockwork` is a 404 by design: the profiler package
+ships no HTML and no JavaScript. The Clockwork Chrome extension needs only the
+`X-Clockwork-*` headers and `/_clockwork/api/{id}`, and both were verified
+reachable on loopback and on this machine's network address.
+
+---
+
 ---
 
 ## Maintenance rules

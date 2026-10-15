@@ -5,7 +5,12 @@
 #     dev/tools/app-test create   # build it, refusing if it already exists
 #     dev/tools/app-test reset    # throw it away and build it again
 #     dev/tools/app-test check    # run its suite
-#     dev/tools/app-test serve    # http://localhost:8001
+#     dev/tools/app-test serve    # http://localhost:8001, loopback
+#
+# Options after `--` are forwarded to the console, which is how the scratch
+# application is reached from outside WSL or from another machine on the network:
+#
+#     dev/tools/app-test serve -- --host=0.0.0.0
 #
 # ## Why this exists
 #
@@ -76,6 +81,7 @@ build() {
     say "    composer test          # the suite"
     say "    composer seed          # create the demo user"
     say "    composer serve         # http://localhost:8001"
+    say "    dev/tools/app-test serve -- --host=0.0.0.0   # reachable from the network"
 }
 
 case "${1:-}" in
@@ -94,7 +100,10 @@ case "${1:-}" in
         ;;
     serve)
         [ -d "$TARGET" ] || die "no $TARGET — run 'dev/tools/app-test create' first"
-        cd "$TARGET" && composer serve
+        # Options are forwarded, so `serve -- --host=0.0.0.0` reaches the console.
+        # The scratch app answers on 8001 so it never collides with a running
+        # skeleton on 8000 — which is the point of having a separate build.
+        cd "$TARGET" && composer serve -- "$@"
         ;;
     -h|--help|help|'') usage 0 ;;
     *) printf 'unknown command: %s\n\n' "$1" >&2; usage 1 ;;

@@ -26,7 +26,7 @@
             "@migrate",
             "@seed"
         ],
-        "serve": "php -S localhost:8001 -t public public/index.php"
+        "serve": "./vendor/bin/empira serve --port=8001"
     },
     "config": {
         "sort-packages": true
