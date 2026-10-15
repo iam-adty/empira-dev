@@ -679,6 +679,42 @@ the change and the clone did not. Committing to `app/` first is the only way in,
 the same constraint §9 records: a change to `app/` is uncovered until it is
 pushed.
 
+### 16. `public/` is served, or the skeleton has no htmx — 2026-10-15
+
+- ~~`app/public/index.php` returns `false` for an existing file~~ — the whole
+  application was dead under `composer serve`, and §15's asset is why.
+- ~~`Serve.php`'s docblock corrected~~ — it claimed `php -S` "serve[s] the
+  static files under `public/`". It does not.
+- ~~A positive assertion in the verify skill's smoke test~~ — every other
+  assertion in it was negative, proving what is *not* served and nothing about
+  what is.
+- ~~`module-contract` checks the guard~~ — it is here because the bug's shape is
+  not "someone broke it" but "the skeleton ships a footgun to everyone who
+  copies it and drops an image into `public/`".
+
+**How it shipped.** `php -S -t public public/index.php` makes the front
+controller a **router script**, and PHP runs a router at the start of every
+request. Falling through to a static file is something the router has to ask for
+by returning `false`; this one never did, so every asset in `public/` was
+answered by the application, which has no route for it and 404s.
+
+Invisible in production — nginx serves `public/` before PHP is involved — and
+total on the dev server, because no htmx means no `hx-*` behaviour at all. And
+latent until §15: `public/` held only `index.php`, so there was no static file
+for the missing fall-through to matter about.
+
+**The failure was process, not code.** The verification of §15 — *"start the
+server, `curl` the file, assert 200"* — was written into a plan and then not run.
+The asset shipped on the strength of a file existing and a hash matching. Both
+were true, and neither was the question. The smoke test existed throughout and
+was blind to it: a suite that proves nothing outside `public/` is served has no
+opinion on whether anything inside it is.
+
+That is worth more than the guard. **A `200` on an asset says the file was found,
+not that the page works** — only loading `/` and clicking something says the
+latter. The skill now says so, because the cheapest false positive in a
+verification is one that looks like a pass.
+
 ---
 
 ## Maintenance rules

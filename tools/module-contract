@@ -312,9 +312,53 @@ bare_skeleton() {
     fi
 }
 
+# ---------------------------------------------------------------------------
+#
+# `public/` is not served unless the front controller says so.
+#
+# `empira serve` runs `php -S -t public public/index.php`, which makes the front
+# controller a *router script* — and PHP runs a router at the start of every
+# request. Falling through to a static file is something the router has to ask
+# for by returning false, and one that does not will answer its own assets, find
+# no route for them, and 404.
+#
+# This shipped. `public/htmx.min.js` was committed, the page pointed at it, and
+# the dev server 404'd it — which meant no htmx, which meant no `hx-*` behaviour
+# at all. Invisible in production, because nginx serves `public/` before PHP is
+# involved; total on the dev server, because every document this workspace
+# documents a run-through of uses it.
+#
+# It is here because the shape of the bug is not "someone broke it". It is that
+# the skeleton ships a footgun to everyone who copies it and drops an image, a
+# stylesheet or a font into `public/`.
+# ---------------------------------------------------------------------------
+serves_static_files() {
+    printf '\n\033[1mapp/\033[0m — the front controller hands back public/ to the web server\n'
+
+    local front=app/public/index.php
+
+    if [ ! -f "$front" ]; then
+        bad "no public/index.php — there is no front controller to check"
+        return
+    fi
+
+    # The router guard, and the three things that make it work: it must be at
+    # the top level (return false is meaningless inside a function), it must be
+    # scoped to the built-in server, and it must look at the path rather than
+    # the raw request URI so a query string does not defeat is_file().
+    if grep -q 'PHP_SAPI.*cli-server' "$front" && grep -qE 'return +false' "$front" \
+        && grep -q 'PHP_URL_PATH' "$front"; then
+        ok "returns false for a static file under the built-in server, so public/ is served"
+    else
+        bad "does not return false for an existing file; every asset in public/ will 404 under 'composer serve'"
+    fi
+}
+
 echo "The skeleton stays bare"
 
 bare_skeleton
+
+serves_static_files
 
 echo
 if [ "$failures" -eq 0 ]; then

@@ -158,6 +158,7 @@ sleep 2                                  # `php -S` needs a moment to bind
 B=http://localhost:8000
 
 curl -s -o "$OUT".home.html -w 'home          %{http_code}\n' "$B/"
+curl -s -o /dev/null -w 'static file   %{http_code}\n' "$B/htmx.min.js"
 curl -s -o /dev/null -w 'unknown url   %{http_code}\n' "$B/nope"
 curl -s -o /dev/null -w 'src reachable %{http_code}\n' "$B/src/App.php"
 curl -s -o /dev/null -w 'dotenv        %{http_code}\n' "$B/.env"
@@ -168,10 +169,17 @@ curl -s -o "$OUT".frag.html -H 'HX-Request: true' -H "HX-Target: $TARGET" "$B/"
 grep -c '<html' "$OUT".frag.html          # must be 0
 ```
 
-Expected: `200`, `404`, `404`, `404`, and `0`.
+Expected: `200`, **`200`**, `404`, `404`, `404`, and `0`.
 
-Three things that are easy to get wrong here:
+Four things that are easy to get wrong here:
 
+- **A static file in `public/` is `200` under `composer serve`, and `404` under
+  nginx.** Same application, opposite answers, because `php -S` runs
+  `public/index.php` as a router script for *every* request and only serves a
+  file itself when that router returns `false`. An application without that guard
+  404s its own assets — invisibly in production, totally on the dev server, since
+  no htmx means no `hx-*` behaviour at all. This is not hypothetical: it is how
+  `public/htmx.min.js` was found.
 - **`.env` is a `404`, not a `403`.** `php -S` has no dotfile rule, so the request
   reaches the front controller. It is still not served — `.env` sits outside
   `public/` — but any document quoting `403` was written against nginx.
@@ -181,6 +189,10 @@ Three things that are easy to get wrong here:
   network address as well as loopback, serving the placeholder secret. That is
   fine on a private network and not fine on a shared one; `--host=127.0.0.1` if in
   doubt.
+
+**A `200` on the asset is necessary and not sufficient.** It says the file was
+found, not that the page works. Load `/` and click something before claiming the
+skeleton runs.
 
 Stop it when you are done:
 
