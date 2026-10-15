@@ -185,10 +185,10 @@ Four things that are easy to get wrong here:
   `public/` — but any document quoting `403` was written against nginx.
 - **`src/App.php` is a `404`** because only `public/` is a document root. If that
   ever answers `200`, the front controller is serving source.
-- **`composer serve` binds `0.0.0.0`**, so it is answering on this machine's
-  network address as well as loopback, serving the placeholder secret. That is
-  fine on a private network and not fine on a shared one; `--host=127.0.0.1` if in
-  doubt.
+- **`composer serve` binds loopback**, so `localhost:8000` is the right address
+  and a network address will refuse. That is the default on purpose — see
+  `agents/app.md` — and a smoke test is exactly the wrong place to put
+  `APP_SECRET` on the network to look at a page.
 
 **A `200` on the asset is necessary and not sufficient.** It says the file was
 found, not that the page works. Load `/` and click something before claiming the

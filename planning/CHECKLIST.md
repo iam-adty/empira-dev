@@ -751,6 +751,37 @@ suite, and the binary is where the project boot happens. A subprocess test is th
 only thing that closes it, and it is **not written** — it needs a fixture with
 `vendor/`, which is why this is recorded rather than quietly fixed twice.
 
+### 18. `composer serve` binds loopback, and both scripts name the binary — 2026-10-15
+
+- ~~`serve` no longer passes `--host=0.0.0.0`~~ — it binds loopback, so the
+  placeholder secret stops being reachable from the network.
+- ~~`serve` and `migrate` are both `./vendor/bin/empira …`~~ — the manifest held
+  three invocation styles for one binary: `php vendor/bin/empira`,
+  `vendor/bin/empira`, and now one. The file is executable with a shebang, so
+  the explicit path is the shortest and says what it runs.
+
+**Why the bind moved.** `APP_SECRET` signs every component URL, so a development
+server reachable from the network is one where anything that can reach the port
+can mint a signed component URL and have the application fetch any component with
+any props. Nothing logs it and nothing 500s — the forged URL simply works. The
+wide bind was accepted on the grounds that a VM is awkward to reach otherwise,
+and the trade was then documented in five places rather than made once in the
+manifest.
+
+**The cost, stated.** A machine you reach from elsewhere now needs
+`--host=0.0.0.0` spelled out. That is the point of the change rather than a cost
+against it: the safe bind is the default and the exposed one is the thing you
+have to ask for. The verify skill's smoke test curls `localhost`, so it never
+depended on the wide bind — and binding every interface to look at a page is not
+a trade any check should make.
+
+**§13 is deliberately left alone**, where it says a missing `APP_ENV` "served
+forgeable component URLs on every interface `composer serve` binds". That was
+true then and is still true — the command binds whatever it is told — and §13
+records why the secret is required in every environment, which a loopback
+default does not weaken. Rewriting a historical entry because a default moved is
+the thing this file's own rules exist to prevent.
+
 ---
 
 ## Maintenance rules

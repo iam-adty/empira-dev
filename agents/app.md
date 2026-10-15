@@ -9,8 +9,8 @@ and serves, and the answer to "how do I wire this up?".
 ## Commands
 
 ```bash
-composer serve                      # every interface, :8000 (needs a .env — see below)
-vendor/bin/empira migrate           # the schema, before anything serves
+composer serve                      # loopback, :8000 (needs a .env — see below)
+composer migrate                    # the schema, before anything serves
 composer validate                   # must stay clean
 ```
 
@@ -18,14 +18,20 @@ There is no `seed` command, and there is no test suite here either. See
 [Account switching](#there-is-no-seed) below, and
 [The skeleton ships no tests](#the-skeleton-ships-no-tests).
 
-**`composer serve` binds every interface, not just loopback.** It is
-`vendor/bin/empira serve --host=0.0.0.0`, so the skeleton answers on this
-machine's address as well as `localhost` — deliberate, because the machine is
-often a VM.
+**`composer serve` binds loopback, and that is deliberate.** It is
+`./vendor/bin/empira serve` with no `--host`, so the skeleton answers on
+`localhost` and nowhere else.
 
 Anything that can reach the port can mint a signed component URL and fetch any
-component with any props, so whatever secret is in `.env` is exposed to the
-network. Use `--host=127.0.0.1` on a network you do not control.
+component with any props, so whatever secret is in `.env` is exposed to whatever
+can reach it. Loopback is the default because a box you reach from another
+machine is the exception, not the rule:
+
+```bash
+vendor/bin/empira serve --host=0.0.0.0   # when the machine is a VM
+```
+
+Pass it only for that, and not on a network you do not control.
 
 **There is no `.env` in the repository and there never will be.** It is
 gitignored, `module-contract` checks that it is both untracked and still ignored,

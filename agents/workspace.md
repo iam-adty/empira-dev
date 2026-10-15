@@ -153,13 +153,14 @@ ls -A tmp
 ```
 
 ```bash
-cd app && composer serve               # every interface, :8000
+cd app && composer serve               # loopback, :8000
 ```
 
 That is the whole runtime: the framework's console, handing over to `php -S`.
-Nothing is built, nothing is started, nothing is waited on. It binds `0.0.0.0` so
-the page answers from another machine, which also means it serves the placeholder
-secret to that network — see [`app.md`](app.md).
+Nothing is built, nothing is started, nothing is waited on. It binds loopback,
+so the page answers only on this machine — which is what keeps the placeholder
+secret off the network. `--host=0.0.0.0` opens that deliberately, for when the
+machine is a VM you reach from elsewhere; see [`app.md`](app.md).
 
 Worker mode is optional and lives in its own package. It ships no image — a stock
 PHP cannot become FrankenPHP at runtime, and whether one should be built is an
