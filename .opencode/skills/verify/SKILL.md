@@ -1,6 +1,6 @@
 ---
 name: verify
-description: Use before claiming a change works, before committing, or when asked to verify, check, confirm or test the framework. Runs lint, the PHPUnit suite, three documentation gates, and a live HTTP smoke test of the skeleton on the host, including htmx fragment rendering and that nothing outside public/ is served.
+description: Use before claiming a change works, before committing, or when asked to verify, check, confirm or test the framework. Runs lint, the PHPUnit suite, four documentation gates, and a live HTTP smoke test of the skeleton on the host, including htmx fragment rendering and that nothing outside public/ is served.
 ---
 
 # Verifying the framework

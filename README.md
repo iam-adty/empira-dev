@@ -54,23 +54,24 @@ of the three repositories, is committed, and names this one:
 "instructions": ["../dev/agents/principle.md", "CONTRIBUTING.md", "docs/*.md"]
 ```
 
-**Skills — `skills.paths`**, in the same file:
+**Skills — `skills`**, in the same file:
 
 ```json
-"skills": { "paths": ["../dev/.opencode/skills"] }
+"skills": ["../dev/.opencode/skills"]
 ```
 
-Skills are the reason for `paths`. OpenCode finds a `.opencode/skills/` directory
-by traversing *upward* from the working directory, stopping at the nearest git
-worktree — and `principle/`, `auth/` and `app/` are all worktrees, so a directory
-in any of them is invisible to a session started there. `dev/` is a sibling of
-all three and therefore not on the traversal path at all. A **path in a config
-file** has no such constraint: it resolves from wherever the session started.
+Skills are the reason for a path rather than a directory. OpenCode finds a
+`.opencode/skills/` directory by traversing *upward* from the working directory,
+stopping at the nearest git worktree — and `principle/`, `auth/` and `app/` are all
+worktrees, so a directory in any of them is invisible to a session started there.
+`dev/` is a sibling of all three and therefore not on the traversal path at all. A
+**path in a config file** has no such constraint: it resolves from wherever the
+session started.
 
 Verified rather than assumed, with the two commands that show the resolved state:
 
 ```bash
-cd principle && opencode debug config    # instructions + skills.paths
+cd principle && opencode debug config    # instructions + skills
 cd principle && opencode debug skill     # all four skills, from dev/
 ```
 

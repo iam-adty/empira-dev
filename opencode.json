@@ -18,26 +18,23 @@
         "../principle/docs/workers.md",
         "../principle/docs/recipes.md"
     ],
-    "//permission": "The workspace's rule, and the reason it lives here rather than in any package: `sed -i*` is denied and the same is true of a Python or heredoc rewrite, but the last of those cannot be expressed as a path pattern. The written rule is in agents/workspace.md and agents/principle.md; this is the part a machine can enforce.",
-    "permission": {
-        "bash": {
-            "*": "ask",
-            "composer test": "allow",
-            "composer validate": "allow",
-            "vendor/bin/phpunit*": "allow",
-            "php -l *": "allow",
-            "php bin/empira *": "allow",
-            "git status*": "allow",
-            "git diff*": "allow",
-            "git log*": "allow",
-            
-            "curl * 127.0.0.1*": "allow",
-            "curl * localhost*": "allow",
-            "grep *": "allow",
-            "find *": "allow",
-            "xargs *": "allow",
-            "sed *": "allow",
-            "sed -i*": "deny"
-        }
-    }
+    "//permission": "The workspace's rule, and the reason it lives here rather than in any package: `sed -i*` is denied and the same is true of a Python or heredoc rewrite, but the last of those cannot be expressed as a path pattern. The written rule is in agents/workspace.md and agents/principle.md; this is the part a machine can enforce.\n\nV2 shape, and one thing to know before editing: this is ONE ORDERED ARRAY and the LAST matching rule wins. So `*` opens with `ask`, every exception follows it, and `sed -i*` closes with `deny` — that ordering IS the rule, and reversing the last two lines silently un-does the only hard permission in the workspace. V1 grouped these by tool and called the action `bash`; V2 calls it `shell`. A saved approval never overrides a configured `deny`, so no session can talk its way past refusing `sed -i`.",
+    "permissions": [
+        { "action": "shell", "resource": "*", "effect": "ask" },
+        { "action": "shell", "resource": "composer test", "effect": "allow" },
+        { "action": "shell", "resource": "composer validate", "effect": "allow" },
+        { "action": "shell", "resource": "vendor/bin/phpunit*", "effect": "allow" },
+        { "action": "shell", "resource": "php -l *", "effect": "allow" },
+        { "action": "shell", "resource": "php bin/empira *", "effect": "allow" },
+        { "action": "shell", "resource": "git status*", "effect": "allow" },
+        { "action": "shell", "resource": "git diff*", "effect": "allow" },
+        { "action": "shell", "resource": "git log*", "effect": "allow" },
+        { "action": "shell", "resource": "curl * 127.0.0.1*", "effect": "allow" },
+        { "action": "shell", "resource": "curl * localhost*", "effect": "allow" },
+        { "action": "shell", "resource": "grep *", "effect": "allow" },
+        { "action": "shell", "resource": "find *", "effect": "allow" },
+        { "action": "shell", "resource": "xargs *", "effect": "allow" },
+        { "action": "shell", "resource": "sed *", "effect": "allow" },
+        { "action": "shell", "resource": "sed -i*", "effect": "deny" }
+    ]
 }
