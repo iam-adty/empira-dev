@@ -114,7 +114,7 @@ narrower contract — `Security\Identity` and `Security\Guard` exist because
 
 ```bash
 # the framework — host PHP, SQLite, no container
-cd principle && composer test          # 487 tests
+cd principle && composer test          # 490 tests
 
 # the auth module — SQLite
 cd auth && composer test               # 37 tests
@@ -219,7 +219,7 @@ slower than never having it.
 
 **The trade is real:** the app no longer demonstrates what the framework can do.
 Authentication is demonstrated by `auth/`'s 37 tests, components and routing by
-the framework's 487. If you are looking for a worked example of a feature, look
+the framework's 490. If you are looking for a worked example of a feature, look
 there rather than in the app.
 
 ## Cross-repository status

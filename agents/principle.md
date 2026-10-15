@@ -1,6 +1,6 @@
 # AGENTS.md
 
-> **Status: describes shipped code.** Current behaviour, verified against `487 tests, 1089 assertions`.
+> **Status: describes shipped code.** Current behaviour, verified against `490 tests, 1103 assertions`.
 > Intended-but-unbuilt work lives in [../planning/SPEC.md](../planning/SPEC.md), marked `[planned]`.
 
 Guidance for AI agents and new contributors working in the Empira framework.

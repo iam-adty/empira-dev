@@ -5,7 +5,7 @@
 > a bug.
 
 Framework: `iam-adty/empira-principle` · app: `iam-adty/empira-app`
-Current: **487 framework tests / 1089 assertions**, **37 auth tests / 71 assertions**, **14 frankenphp tests / 24 assertions**, **38 debugtools tests / 119 assertions**, **26 app-test tests / 53 assertions** (in the generated `app-test/`, not in `app/`).
+Current: **490 framework tests / 1103 assertions**, **37 auth tests / 71 assertions**, **14 frankenphp tests / 24 assertions**, **38 debugtools tests / 119 assertions**, **26 app-test tests / 53 assertions** (in the generated `app-test/`, not in `app/`).
 
 ---
 
@@ -466,7 +466,7 @@ and queries it, Migrations plans against it.
   SQLite would create an empty file and the application would report having no
   data.
 - ~~`tools/test` runs on the host~~ — a daemon, an image and a container per run
-  were being spent on 480 tests that open a file. The suite is 487 tests in 0.7s
+  were being spent on 480 tests that open a file. The suite is 490 tests in 0.7s
   with nothing started. **The early-exit check is unchanged and re-proved**: bare
   `phpunit` returns 0 on a truncated run; `tools/test` returns 1 and says why.
 - ~~Every container artifact deleted~~ — `principle/{Dockerfile,docker-compose.yml,.dockerignore}`,
@@ -603,8 +603,8 @@ entity mapping. It clears the row first now.
 **Two things the implementation had to get right, and one it had to give up.**
 
 It runs the suites rather than counting `public function test` methods, because
-`principle` declares 474 of them and reports **487** — two are data providers, a
-13-test error on the largest suite. The other four agree exactly, which is a
+`principle` declares 474 of them and reports **490** — two are data providers, a
+16-test error on the largest suite. The other four agree exactly, which is a
 coincidence and not a licence.
 
 It matches the *shapes* a live baseline takes rather than every `\d+ tests`,
@@ -714,6 +714,42 @@ That is worth more than the guard. **A `200` on an asset says the file was found
 not that the page works** — only loading `/` and clicking something says the
 latter. The skill now says so, because the cheapest false positive in a
 verification is one that looks like a pass.
+
+### 17. `route:list` stopped fataling on every conventional application — 2026-10-15
+
+- ~~`route:list` takes the application the console already booted~~ — it no
+  longer requires a second one. `bin/empira` boots the project before it
+  dispatches, so the application exists by the time any command runs.
+- ~~`bootstrap/app.php` preferred to `src/App.php`~~ — when it does have to look
+  for a file. The bootstrap is safe to require twice because it resolves classes
+  through an autoloader; the class file never is.
+- ~~Three tests~~ — the conventional layout had no coverage at all.
+
+**The bug.** `vendor/bin/empira route:list` fataled with *"Cannot redeclare
+class `App\App`"* for every application following the documented layout.
+`bin/empira` requires `bootstrap/app.php`, which autoloads `src/App.php`;
+`route:list` then defaulted to `src/App.php` itself, and `require` has no
+include-once semantics, so the declaration ran twice. `migrate` and `serve` were
+unaffected because the console hands them the booted application instead of
+re-requiring anything.
+
+**Two blind spots, either of which alone would have hidden it.** The console
+tests call `Application->run()` in-process and never execute `bin/empira`, so
+nothing was ever pre-required and the collision could not happen. And every
+`route:list` fixture used `routes.php` or an explicit `--app=`, so the
+conventional branch was never taken — while the test *named*
+`testRouteListFindsTheApplicationInTheTargetDirectory` writes `routes.php`, so
+its name promised the default and exercised the fallback.
+
+**The one test that matters calls `Bootstrap::boot()` first**, because that is
+the step the helper omits. Without it the test passes against the broken code;
+confirmed by reverting the fix and watching it fail with the reported fatal.
+
+**Same shape as §16.** Nothing in this workspace runs `vendor/bin/empira`. Any
+defect depending on what the binary does before dispatch is invisible to the
+suite, and the binary is where the project boot happens. A subprocess test is the
+only thing that closes it, and it is **not written** — it needs a fixture with
+`vendor/`, which is why this is recorded rather than quietly fixed twice.
 
 ---
 

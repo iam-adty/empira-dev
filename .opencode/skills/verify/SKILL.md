@@ -60,7 +60,7 @@ dev/tools/check-readme-installs        # every README's install snippet works as
 
 `check-baselines` is the exception: it **runs** the four library suites, because
 counting `public function test` methods is wrong — `principle` declares 474 and
-reports 487, because two are data providers. It needs `composer install` done in
+reports 490, because two are data providers. It needs `composer install` done in
 each package, and it skips `app-test` when the scratch application is not built.
 
 `check-links` is the one to reach for after editing documentation. It is strict
@@ -103,7 +103,7 @@ you do not need.
 cd principle && composer test
 ```
 
-`487 tests, 1089 assertions` is the current baseline. **If your change adds or
+`490 tests, 1103 assertions` is the current baseline. **If your change adds or
 removes tests, update that number in every document that quotes it** —
 `dev/agents/principle.md`, `dev/planning/CHECKLIST.md`, `principle/ARCHITECTURE.md`, `principle/docs/testing.md`.
 
