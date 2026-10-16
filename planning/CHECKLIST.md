@@ -5,7 +5,7 @@
 > a bug.
 
 Framework: `iam-adty/empira-principle` · app: `iam-adty/empira-app`
-Current: **490 framework tests / 1103 assertions**, **37 auth tests / 71 assertions**, **14 frankenphp tests / 24 assertions**, **45 debugtools tests / 125 assertions**, **26 app-test tests / 55 assertions** (in the generated `app-test/`, not in `app/`).
+Current: **511 framework tests / 1153 assertions**, **37 auth tests / 71 assertions**, **14 frankenphp tests / 24 assertions**, **45 debugtools tests / 125 assertions**, **26 app-test tests / 55 assertions** (in the generated `app-test/`, not in `app/`).
 
 ---
 
@@ -948,6 +948,77 @@ instance to leak — dropping it cost a test, not a design.
 **Not verified.** No browser here, so the toolbar has not been seen rendering.
 The injection rules are asserted on response bodies, which is the contract; that
 DebugBar's own JavaScript draws is upstream's to have tested.
+
+### 22. PSR-7, PSR-11, PSR-15 and PSR-17 — 2026-10-16
+
+- ~~`Container implements Psr\Container\ContainerInterface`~~ — `get()` and
+  `has()` already existed.
+- ~~`ContainerException` implements the PSR marker, no longer `final`~~
+- ~~`NotFound extends ContainerException implements NotFoundExceptionInterface`~~
+- ~~`Request implements ServerRequestInterface`, `Response implements ResponseInterface`~~
+- ~~`Middleware extends MiddlewareInterface`, with `process()`~~
+- ~~`Empira\Http\Psr17` — one object implementing all six factories~~
+- ~~`Application::handle()` accepts a `ServerRequestInterface`~~
+- ~~`PsrComplianceTest` — 22 tests, one per claim~~
+
+**This is the package's own stated position applied to itself.**
+`agents/principle.md:12` has said since the start that *"a dependency chosen
+deliberately for the boring, standardised things is worth more than a hand-rolled
+one that only this framework understands"* — which is why `psr/log` was adopted.
+HTTP messages and middleware are the same category. `nyholm/psr7` supplies the
+`Stream`, `Uri` and `UploadedFile` rather than hand-writing ~350 lines of exactly
+the code that policy says to import.
+
+**PSR-11 first, because it is nearly free and everything else builds on it.**
+The exception split is PSR-11's own: "something went wrong" is `ContainerException`,
+"there is nothing here" is `NotFound`, and `NotFound` extends the other so an
+application catching `ContainerException` keeps catching what it caught.
+
+## Three things the standards cost, none of which was obvious
+
+**`withHeader()` used to mutate under a PSR-shaped name.** PSR-7 requires every
+`with*` to clone. Two places discarded the return and were silently queueing nothing — both in `Application`, in
+`errorResponse()` and in `renderException()`, each a bare
+`$response->withHeader(...)` with no assignment. Found by reading, not by a test.
+
+**`setBody()` and `setStatus()` were removed rather than aliased.** One immutable
+way and one mutable way is how a codebase ends up with responses that half the
+pipeline believes are shared.
+
+**The component/context response had to be rebuilt.** `Component` held a *copy*
+of `Context::$response`, which only worked because both were the same mutable
+object. Under immutability the copy diverged and every `validate()` event and
+every `pushUrl()` was lost — silently, because the tests were asserting on the
+component's copy. `Context::$response` is now replaceable and is the single
+answer; `Component` proxies to it and gained `updateResponse()`.
+
+**`Request`'s constructor properties lost `readonly`.** PSR-7 needs `with*()` to
+clone and PHP will not assign a readonly property on a clone. The alternative was
+rebuilding fifteen methods through a nine-argument constructor, which puts the
+maintenance burden of "a new field was added" on fifteen places instead of one.
+Stated in the class docblock rather than buried.
+
+**Full `process()` rather than a closure-preserving base class**, which was the
+other option offered and declined. The cost is real and permanent: the parameter
+is `ServerRequestInterface`, PHP forbids narrowing it, and the htmx conveniences
+are therefore out of scope inside every middleware. `Request::of()` recovers them
+in one line and **throws** rather than returning null — a middleware that quietly
+degraded would work for everything except the htmx case, which is the one nobody
+would notice until a swap stopped being one.
+
+**`UploadedFile` keeps both shapes.** `files()` still answers with the
+`$_FILES`-shaped array application code has always read; `getUploadedFiles()`
+answers with PSR objects, built lazily so a request with fifty uploads opens no
+handles for a consumer that never looks. Converting on construction would have
+been the cleaner design and the bigger break.
+
+**Verified:** third-party PSR-15 middleware naming no Empira class runs unadapted,
+including short-circuiting; a factory-built request satisfies the standard and
+keeps `path()`; `App-Test` rebuilds and passes at 26/55; a live page renders with
+the toolbar injected and both profiler endpoints answering. **511 framework
+tests / 1153 assertions**, and the suite was run three times rather than once —
+immutability changes are exactly the shape that passes a single run while having
+changed the semantics.
 
 ---
 
