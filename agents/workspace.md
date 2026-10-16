@@ -114,7 +114,7 @@ narrower contract — `Security\Identity` and `Security\Guard` exist because
 
 ```bash
 # the framework — host PHP, SQLite, no container
-cd principle && composer test          # 553 tests
+cd principle && composer test          # 554 tests
 
 # the auth module — SQLite
 cd auth && composer test               # 53 tests
@@ -126,7 +126,7 @@ cd frankenphp && composer test         # 14 tests
 cd debugtools && composer test         # 47 tests
 
 # the application — SQLite, and not in app/:
-dev/tools/app-test check               # 26 tests, in the generated app-test/
+dev/tools/app-test check               # 27 tests, in the generated app-test/
 ```
 
 And four checks, none of which need a server running — run these before claiming

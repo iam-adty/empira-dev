@@ -106,6 +106,54 @@ final class AppTest extends TestCase
     }
 
     /**
+     * The component on the home page answers its own button.
+     *
+     * The join, and the reason it is not two tests. "The counter appears on `/`"
+     * and "the counter's action resolves" are different claims, and a page can
+     * satisfy the first while failing the second — which is exactly how the
+     * framework's own docblock example shipped a counter with no button in it,
+     * and how the DebugBar toolbar shipped pointing at a URL matching no route.
+     *
+     * So: read the URL out of the page the way a browser would, POST to it, and
+     * assert the count moved. The URL is the generated one, signed, carrying the
+     * state — there is nothing to construct by hand.
+     */
+    public function testTheComponentOnTheHomePageAnswersItsOwnButton(): void
+    {
+        $app = App::boot();
+
+        $page = $app->handle(new Request('GET', '/'));
+
+        self::assertSame(200, $page->status());
+
+        $body = $page->body();
+
+        $this->assertStringContainsString('id="counter"', $body, 'the component is not on the page');
+
+        preg_match('/hx-post="([^"]+)"/', $body, $matches);
+        $this->assertNotEmpty($matches[1] ?? [], 'the button carries no generated action URL');
+
+        // The CSRF token comes off the page the way htmx would send it — read
+        // from the `hx-headers` the layout puts on `<body>`. Inventing one here
+        // would test a header the browser does not send, and a POST without it
+        // is a 403, which is the framework being right.
+        preg_match('/hx-headers="([^"]+)"/', $body, $headers);
+        $this->assertNotEmpty($headers[1] ?? [], 'the page carries no hx-headers');
+
+        $token = json_decode(html_entity_decode($headers[1]), true)['X-CSRF-Token'] ?? null;
+        $this->assertIsString($token, 'hx-headers carries no CSRF token');
+
+        $response = $app->handle(new Request(
+            'POST',
+            html_entity_decode($matches[1]),
+            headers: ['HX-Request' => 'true', 'X-CSRF-Token' => $token],
+        ));
+
+        self::assertSame(200, $response->status(), 'the action did not resolve');
+        $this->assertStringContainsString('<strong>1</strong>', $response->body(), 'the count did not move');
+    }
+
+    /**
      * Remove the database this class created.
      *
      * The workspace `tmp/` is shared by all three suites and is documented as

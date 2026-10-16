@@ -5,7 +5,7 @@
 > a bug.
 
 Framework: `iam-adty/empira-principle` · app: `iam-adty/empira-app`
-Current: **553 framework tests / 1223 assertions**, **53 auth tests / 102 assertions**, **14 frankenphp tests / 24 assertions**, **47 debugtools tests / 130 assertions**, **26 app-test tests / 56 assertions** (in the generated `app-test/`, not in `app/`).
+Current: **554 framework tests / 1229 assertions**, **53 auth tests / 102 assertions**, **14 frankenphp tests / 24 assertions**, **47 debugtools tests / 130 assertions**, **27 app-test tests / 63 assertions** (in the generated `app-test/`, not in `app/`).
 
 ---
 
@@ -1143,6 +1143,35 @@ in.
 The subprocess test in `LoadEnvironmentTest` points the constant at a temporary
 directory rather than at this package. Writing a `.env` into `principle/` to
 satisfy a test would have been the bug, not the fix.
+
+### 27. One component, and a docblock that had been wrong for months — 2026-10-16
+
+- ~~`App\Components\Counter` — the framework's own example, on the home page~~
+- ~~`Component`'s docblock example corrected~~ — it rendered a counter with no button
+- ~~`ConsoleTest` renders what `make:component` writes~~ — it only matched text
+
+**The example was wrong, and only the one.** `Component`'s docblock appended the
+button and then called `text()` on the parent — and `Element::text()` replaces
+every child with one text node, so it threw the button away. `MakeComponent`,
+`docs/components.md` and `README.md` all got it right. Three copies correct, one
+broken, nothing noticed: **a docblock is prose until something renders it.**
+
+Found by writing the skeleton's `Counter` verbatim from it and looking at what
+came out. The fix was one line; the reason it survived is the part worth keeping.
+
+**The scaffold test could not have caught it, either.** Every assertion in
+`ConsoleTest` matched *text* — `assertStringContainsString("…->action('increment')")`.
+A component that rendered nothing at all would have passed all of them. It now
+renders what the command wrote and asserts a button, an action URL ending in the
+action's own name, and an `hx-target` naming an id the markup contains. Verified
+red with the scaffold broken.
+
+**The harness test is a join, for the same reason.** "The counter appears on `/`"
+and "its action resolves" are different claims, and the same shape shipped twice
+already — a toolbar pointing at a URL matching no route, and a docblock example
+with no button. So the test reads the generated URL out of the page the way a
+browser would, POSTs it with the CSRF token off `<body hx-headers>`, and asserts
+the count moved.
 
 ## Three things the standards cost, none of which was obvious
 

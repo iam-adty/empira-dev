@@ -103,7 +103,7 @@ you do not need.
 cd principle && composer test
 ```
 
-`553 tests, 1223 assertions` is the current baseline. **If your change adds or
+`554 tests, 1229 assertions` is the current baseline. **If your change adds or
 removes tests, update that number in every document that quotes it** —
 `dev/agents/principle.md`, `dev/planning/CHECKLIST.md`, `principle/ARCHITECTURE.md`, `principle/docs/testing.md`.
 
@@ -133,7 +133,7 @@ cd auth && composer test          # 53 tests, 102 assertions
 cd auth && composer validate      # must be clean
 cd app  && composer validate      # must be clean — app/ has no suite of its own
 cd debugtools && composer test    # 47 tests, 130 assertions
-dev/tools/app-test check          # 26 tests, 56 assertions — the generated app-test/
+dev/tools/app-test check          # 27 tests, 63 assertions — the generated app-test/
 ```
 
 A change to `principle/src/Security/` or to the module contract is not finished
