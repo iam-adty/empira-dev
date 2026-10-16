@@ -4,16 +4,17 @@ declare(strict_types=1);
 
 namespace App;
 
-use App\App\EnvSecret;
-use App\App\Modules;
-use App\App\Overrides;
-use App\App\ProvidesLogger;
-use App\App\ProvidesSecret;
-use App\App\ProvidesStorage;
-use App\App\SqliteStorage;
-use App\App\StderrLogger;
 use App\Pages\LoginLayout;
 use Empira\Application;
+use Empira\Application\EnvSecret;
+use Empira\Application\LoginPage;
+use Empira\Application\Modules;
+use Empira\Application\Overrides;
+use Empira\Application\ProvidesLogger;
+use Empira\Application\ProvidesSecret;
+use Empira\Application\ProvidesStorage;
+use Empira\Application\SqliteStorage;
+use Empira\Application\StderrLogger;
 use Empira\Auth\AuthModule;
 use Empira\Config\Env;
 use Empira\ConfigurableModule;
@@ -54,7 +55,8 @@ use Empira\State\StateStore;
  * skeleton's registry passed `dirname(__DIR__)` to say that; the module defaults
  * to the same answer.
  */
-#[Modules([AuthModule::class, DebugToolsModule::class], login: LoginLayout::class)]
+#[Modules(AuthModule::class, DebugToolsModule::class)]
+#[LoginPage(LoginLayout::class)]
 #[Overrides(secret: EnvSecret::class, logger: StderrLogger::class, storage: SqliteStorage::class)]
 final class App extends Application
 {
@@ -102,7 +104,9 @@ final class App extends Application
         $overrides = self::attribute(Overrides::class);
         $modules = self::attribute(Modules::class);
 
-        self::publishDatabaseDefaults(self::override($overrides->storage, ProvidesStorage::class)->path());
+        self::publishDatabaseDefaults(self::resolveStorage(
+            self::override($overrides->storage, ProvidesStorage::class)->path(),
+        ));
 
         parent::__construct(
             secret: self::override($overrides->secret, ProvidesSecret::class)->secret(),
@@ -114,7 +118,7 @@ final class App extends Application
 
         $this->orm(null, [__DIR__, AuthModule::entityPath()]);
 
-        $this->module(...$this->resolveModules($modules));
+        $this->module(...$this->resolveModules($modules->modules));
 
         $this->log(self::override($overrides->logger, ProvidesLogger::class)->logger());
 
@@ -131,9 +135,11 @@ final class App extends Application
     /**
      * @return list<\Empira\Module>
      */
-    private function resolveModules(Modules $modules): array
+    private function resolveModules(array $classes): array
     {
-        $options = ['login' => $modules->login];
+        $login = self::attribute(LoginPage::class, required: false);
+
+        $options = $login instanceof LoginPage ? ['login' => $login->page] : [];
 
         return array_map(function (string $class) use ($options): \Empira\Module {
             $module = $this->container()->get($class);
@@ -143,7 +149,12 @@ final class App extends Application
             }
 
             return $module;
-        }, $modules->modules);
+        }, $classes);
+    }
+
+    private static function resolveStorage(string $path): string
+    {
+        return str_starts_with($path, '/') ? $path : dirname(__DIR__) . '/' . $path;
     }
 
     private static function publishDatabaseDefaults(string $path): void
@@ -174,11 +185,15 @@ final class App extends Application
         return new $class();
     }
 
-    private static function attribute(string $name): object
+    private static function attribute(string $name, bool $required = true): ?object
     {
         $found = (new \ReflectionClass(static::class))->getAttributes($name, \ReflectionAttribute::IS_INSTANCEOF);
 
         if ($found === []) {
+            if (! $required) {
+                return null;
+            }
+
             throw new \LogicException(sprintf(
                 '%s must declare #[%s] — an application with neither has nothing to build itself from.',
                 static::class,

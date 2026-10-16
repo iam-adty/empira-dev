@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Tests;
 
 use App\App;
-use App\App\Modules;
+use Empira\Application\Modules;
 use Empira\Auth\Auth;
 use Empira\Auth\AuthModule;
 use Empira\Auth\User;

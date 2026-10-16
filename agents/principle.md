@@ -1,6 +1,6 @@
 # AGENTS.md
 
-> **Status: describes shipped code.** Current behaviour, verified against `521 tests, 1168 assertions`.
+> **Status: describes shipped code.** Current behaviour, verified against `528 tests, 1184 assertions`.
 > Intended-but-unbuilt work lives in [../planning/SPEC.md](../planning/SPEC.md), marked `[planned]`.
 
 Guidance for AI agents and new contributors working in the Empira framework.
@@ -12,8 +12,12 @@ A PHP framework where **htmx lives in PHP classes, not HTML attributes**. A comp
 It is not dependency-free, and no longer tries to be. The framework depends on
 `psr/log` and Doctrine: a dependency chosen deliberately for the boring,
 standardised things is worth more than a hand-rolled one that only this framework
-understands. What stays hand-written is the part that is the framework's actual
-subject — components, routing, views, and the htmx wiring.
+understands. It also depends on Monolog, for exactly one class — the default
+logger in `Application\StderrLogger`. That is the exception rather than the rule:
+`Application::log()` takes a `LoggerInterface` and nothing in `principle/src`
+outside that one file names a concrete implementation, so an application with its
+own logger never touches Monolog. What stays hand-written is the part that is the
+framework's actual subject — components, routing, views, and the htmx wiring.
 
 What the framework does **not** do is assume an application needs a feature.
 Authentication is a module in [`../auth`](../../auth), and this framework boots,

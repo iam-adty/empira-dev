@@ -5,7 +5,7 @@
 > a bug.
 
 Framework: `iam-adty/empira-principle` · app: `iam-adty/empira-app`
-Current: **521 framework tests / 1168 assertions**, **51 auth tests / 99 assertions**, **14 frankenphp tests / 24 assertions**, **47 debugtools tests / 130 assertions**, **26 app-test tests / 56 assertions** (in the generated `app-test/`, not in `app/`).
+Current: **528 framework tests / 1184 assertions**, **51 auth tests / 99 assertions**, **14 frankenphp tests / 24 assertions**, **47 debugtools tests / 130 assertions**, **26 app-test tests / 56 assertions** (in the generated `app-test/`, not in `app/`).
 
 ---
 
@@ -1036,6 +1036,44 @@ entity paths as the *configuration*. It shipped, booted and served — against a
 database with no tables in it. The scratch suite caught it; `principle` now turns
 it into a boot that stops.
 
+### 24. The application seam moved into the framework — 2026-10-16
+
+- ~~`Empira\Application\{Modules, LoginPage, Overrides, ProvidesSecret,
+  ProvidesLogger, ProvidesStorage, EnvSecret, StderrLogger, SqliteStorage}`~~
+- ~~`app/src/App/` deleted — the skeleton has no `App\` sub-namespace at all~~
+- ~~`Modules` is variadic and names only what loads~~
+- ~~`#[LoginPage]`, because PHP forbids a variadic before another parameter~~
+- ~~`monolog/monolog` joins `principle`; the skeleton no longer requires it~~
+
+**They were in the one directory belonging to no package.** `app/src/App/` is
+copied by whoever installs the skeleton and is in no repository anyone depends
+on, so a contract only `app/` could name could only ever be implemented by
+`app/` — the same closed loop `ConfigurableModule` was added to break, and the
+reason it sits in `principle` while only the application names it.
+
+**Two defaults had to change, because they computed paths from `__DIR__`.**
+`SqliteStorage` returned `dirname(__DIR__, 2) . '/storage/app.sqlite'`, which
+from `principle/src/` is `vendor/iam-adty/empira-principle/storage/app.sqlite`.
+Every skeleton would have written its database into the package it was installed
+from — green in a test run, because nothing reinstalls the framework mid-suite,
+and gone with the next `composer install`, on the machine that deployed it.
+`EnvSecret`'s refusal interpolated the same directory and would have named
+`vendor/…/principle/.env`.
+
+Both are tested, and the storage one was verified red against the `__DIR__`
+version before the fix was believed.
+
+**PHP's rule produced the better shape.** A variadic must be the last parameter,
+so `login:` could not stay on `Modules` once it became variadic. What replaced it
+— a one-value `#[LoginPage]` — is better than what it displaced: a module's
+identity and a module's configuration are different facts, and two attributes say
+so without a comment explaining which half you are reading.
+
+**Monolog is the exception, stated as one.** `Application::log()` still takes a
+`LoggerInterface`, and nothing in `principle/src` outside `StderrLogger.php`
+names a concrete implementation. The framework ships *a* working default rather
+than none, and an application with its own logger never touches Monolog.
+
 ## Three things the standards cost, none of which was obvious
 
 **`withHeader()` used to mutate under a PSR-shaped name.** PSR-7 requires every
@@ -1078,7 +1116,7 @@ been the cleaner design and the bigger break.
 including short-circuiting; a factory-built request satisfies the standard and
 keeps `path()`; `App-Test` rebuilds and passes at 26/56; a live page renders with
 the toolbar injected and both profiler endpoints answering. **521 framework
-tests / 1168 assertions**, and the suite was run three times rather than once —
+tests / 1184 assertions**, and the suite was run three times rather than once —
 immutability changes are exactly the shape that passes a single run while having
 changed the semantics.
 

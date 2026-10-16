@@ -113,7 +113,7 @@ degradation is only safe if it is known to be one.
 ## Commands
 
 ```bash
-cd principle && composer test    # 521 tests, SQLite on the host
+cd principle && composer test    # 528 tests, SQLite on the host
 cd auth      && composer test    # 51 tests, SQLite
 cd frankenphp && composer test   # 14 tests, SQLite
 cd debugtools && composer test   # 47 tests, SQLite

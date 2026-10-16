@@ -111,7 +111,7 @@ a page, and a layout.
 
 The trade is real and worth stating: **this app no longer demonstrates what the
 framework can do.** The auth module's own suite demonstrates authentication; the
-framework's 521 tests demonstrate components, routing, regions, sessions, CSRF
+framework's 528 tests demonstrate components, routing, regions, sessions, CSRF
 and the ORM. If you want a worked example of a feature end to end, read that
 package's tests rather than looking for it here.
 
