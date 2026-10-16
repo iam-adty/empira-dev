@@ -18,15 +18,13 @@ declare(strict_types=1);
  * Loading it twice is harmless — `loadEnvironment()` is idempotent for the same
  * file — but PHPUnit runs this once per process, which is once.
  *
- * The root is passed rather than left to `EMPIRA_APP_ROOT`, because the constant is
- * defined by the two *entry points* and this is neither of them: PHPUnit loads
- * this file directly and never goes near `public/index.php` or
- * `bootstrap/app.php`. That is exactly the case the framework refuses to guess
- * its way through, and this file is the honest answer — it knows where it is.
+ * Called with no arguments, like both entry points: `App` reads its own root off
+ * its own file. The constant `EMPIRA_APP_ROOT` stays available for a deployment
+ * laid out differently from its source tree.
  */
 
 use App\App;
 
 require dirname(__DIR__) . '/vendor/autoload.php';
 
-App::loadEnvironment([], dirname(__DIR__));
+App::loadEnvironment();

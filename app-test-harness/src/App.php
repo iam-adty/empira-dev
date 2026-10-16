@@ -92,7 +92,7 @@ final class App extends Application
      */
     public static function loadEnvironment(array $keys = [], ?string $basePath = null): void
     {
-        parent::loadEnvironment([...self::CONFIG_KEYS, ...$keys], $basePath);
+        parent::loadEnvironment([...self::CONFIG_KEYS, ...$keys], $basePath ?? static::basePath());
     }
 
     public function __construct(?StateStore $state = null, ?Csrf $csrf = null)

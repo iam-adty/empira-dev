@@ -110,7 +110,7 @@ a page, and a layout.
 
 The trade is real and worth stating: **this app no longer demonstrates what the
 framework can do.** The auth module's own suite demonstrates authentication; the
-framework's 549 tests demonstrate components, routing, regions, sessions, CSRF
+framework's 553 tests demonstrate components, routing, regions, sessions, CSRF
 and the ORM. If you want a worked example of a feature end to end, read that
 package's tests rather than looking for it here.
 
@@ -305,27 +305,31 @@ The mechanism is `Application::loadEnvironment()`; `App` passes the key list.
 That split is deliberate — the framework cannot know that `LOG_LEVEL` is
 configuration and `NOT_A_REAL_KEY` is not.
 
-**Where the application is, and who says so.** `EMPIRA_APP_ROOT` is defined by the
-two entry points, and they are the only parties that know:
+**Where the application is, and who says so.** `App` reads it off its own file.
+Both entry points call `App::loadEnvironment()` with no arguments, because
+`static::basePath()` already knows:
 
 ```php
-defined('EMPIRA_APP_ROOT') || define('EMPIRA_APP_ROOT', dirname(__DIR__));
+require dirname(__DIR__) . '/vendor/autoload.php';
 App::loadEnvironment();
 ```
 
-Both files need it. The console never loads `public/index.php` — `vendor/bin/empira`
-requires `bootstrap/app.php` — so a constant defined only in the front
-controller would leave `empira migrate` reading configuration from wherever the
-process happened to start.
+`basePath()` prefers `EMPIRA_APP_ROOT` when it is defined, which is how a
+deployment laid out differently from its source tree says so. Nothing in the
+skeleton defines it — the skeleton *is* the conventional layout.
 
-The `defined() ||` guard is not defensive tidiness. Both entry points can be
-reached twice in one process, and an unconditional `define()` warns on the
-second load and **is a fatal error in PHP 9**.
+**Two mechanisms, because they fail in opposite ways.** A constant cannot be
+*wrong* — an entry point setting it is stating a fact — but it can be *missing*.
+Reflection cannot be missing, but it can be *wrong*: `dirname(…, 2)` assumes the
+class sits in `<root>/src/`, which is PSR-4's convention rather than its rule,
+and when the assumption fails the database and the profiler's recordings go
+somewhere nobody looks. So the constant wins when present, reflection is
+*checked* when it is not, and a candidate with no `src/` in it is refused by
+name.
 
-`Application::loadEnvironment()` refuses rather than falling back to `getcwd()`
-when it has neither the constant nor an explicit path. The working directory is
-whatever the process manager or the operator started the process in, and a
-configuration file read from there is one the application did not write.
+`Application::loadEnvironment()` still refuses to fall back to `getcwd()` when
+called with neither a path nor the constant. `App` passes `basePath()` so it
+never has to; a caller that does not know where it is gets a boot that stops.
 
 Consequences worth knowing before you add a setting:
 

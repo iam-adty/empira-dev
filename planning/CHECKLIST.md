@@ -5,7 +5,7 @@
 > a bug.
 
 Framework: `iam-adty/empira-principle` · app: `iam-adty/empira-app`
-Current: **549 framework tests / 1217 assertions**, **53 auth tests / 102 assertions**, **14 frankenphp tests / 24 assertions**, **47 debugtools tests / 130 assertions**, **26 app-test tests / 56 assertions** (in the generated `app-test/`, not in `app/`).
+Current: **553 framework tests / 1223 assertions**, **53 auth tests / 102 assertions**, **14 frankenphp tests / 24 assertions**, **47 debugtools tests / 130 assertions**, **26 app-test tests / 56 assertions** (in the generated `app-test/`, not in `app/`).
 
 ---
 
@@ -1106,31 +1106,39 @@ matched nothing without complaining. The module served its own page and nothing
 said why. Found by the join test, which is the second time in two days that a
 test written to close a seam found the seam was never closed.
 
-### 26. The entry points say where the application is — 2026-10-16
+### 26. `App` says where the application is — 2026-10-16
 
 - ~~`Application::loadEnvironment(array $keys, ?string $basePath)`~~
-- ~~`EMPIRA_APP_ROOT` defined by `public/index.php` and `bootstrap/app.php`~~
+- ~~`EMPIRA_APP_ROOT` — defined by both entry points, later retired~~
 - ~~`basePath()` prefers the constant over reflecting on `static::class`~~
-- ~~An unconditional `define()` is guarded — it is a fatal error in PHP 9~~
+- ~~`App::loadEnvironment()` defaults to `static::basePath()`~~
+- ~~`basePath()` refuses a root that has no `src/` in it~~
 
-**Both entry points need the constant, and it is worth being clear why.**
-The console never loads the front controller: `vendor/bin/empira` requires
-`bootstrap/app.php` and boots from that. An `EMPIRA_APP_ROOT` defined only in
-`public/index.php` would leave `empira migrate` reading configuration from
-wherever the process happened to start. Two entry points, two definitions, same
-name and value — the same reason there are two boot methods.
+**`EMPIRA_APP_ROOT` started as boilerplate and ended as an escape hatch.** Both
+entry points defined it, which meant the duplication this section was trying to
+remove: three lines, twice, plus twenty lines of comment in `index.php` explaining
+why two files defined the same constant. `App` now reads its own root off its own
+file, so neither entry point defines anything and neither has to know.
 
-**It refuses rather than guessing.** `loadEnvironment()` with neither a path nor
-the constant throws rather than falling back to `getcwd()`, which is whatever
-the process manager, the scheduler or the operator started the process in. A
-`.env` read from there is a configuration file the application did not write, and
-the failure is a secret that is not the secret.
+**Two mechanisms survive, because they fail in opposite ways.** A constant cannot
+be *wrong* but can be *missing*; reflection cannot be missing but can be *wrong*.
+`dirname(…, 2)` assumes the class sits in `<root>/src/` — PSR-4's convention, not
+its rule — and when it does not hold nothing failed. The database and the
+profiler's recordings went to a directory nobody was looking at, and every query
+still answered. So the constant wins when present, reflection is *checked* when
+it is not, and a root with no `src/` in it is refused by name.
 
-**PHP 9 found the guard for me.** An unconditional `define()` warns when the file
-is reached twice, and the scratch suite reaches `bootstrap/app.php` twice on
-every console test — `Bootstrap::boot()` does, and so does a test that boots it
-by hand. It is a warning today and a fatal error in PHP 9, which is the shape
-worth fixing before it is an outage rather than after.
+**A guard on a path is worth more than the path.** `basePath()` now verifies what
+reflection produced, and its test writes the class under test to a temporary
+directory — because a fixture in `tests/` is under a root that has a `src/` in it
+and could never exercise the refusal. Every case is a subprocess, for the reason
+`LoadEnvironmentTest`'s is: a constant cannot be defined and undefined inside one
+process.
+
+**`loadEnvironment()` still refuses to guess.** `App` passes `basePath()` so it
+never has to; a caller that genuinely does not know where it is gets a boot that
+stops rather than a `.env` read from whatever directory the process was started
+in.
 
 The subprocess test in `LoadEnvironmentTest` points the constant at a temporary
 directory rather than at this package. Writing a `.env` into `principle/` to

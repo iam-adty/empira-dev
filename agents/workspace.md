@@ -114,7 +114,7 @@ narrower contract — `Security\Identity` and `Security\Guard` exist because
 
 ```bash
 # the framework — host PHP, SQLite, no container
-cd principle && composer test          # 549 tests
+cd principle && composer test          # 553 tests
 
 # the auth module — SQLite
 cd auth && composer test               # 53 tests

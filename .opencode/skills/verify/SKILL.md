@@ -103,7 +103,7 @@ you do not need.
 cd principle && composer test
 ```
 
-`549 tests, 1217 assertions` is the current baseline. **If your change adds or
+`553 tests, 1223 assertions` is the current baseline. **If your change adds or
 removes tests, update that number in every document that quotes it** —
 `dev/agents/principle.md`, `dev/planning/CHECKLIST.md`, `principle/ARCHITECTURE.md`, `principle/docs/testing.md`.
 
