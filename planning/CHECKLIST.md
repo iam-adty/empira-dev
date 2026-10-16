@@ -1007,7 +1007,7 @@ do — it ships a plain page as a floor and gets told about the real one.
 
 **Two of the things found here were silent, and that is the shape worth
 recording.** `ClassScanner` reported interfaces and traits as PSR-4 mismatches,
-because `class_exists()` is false for both. `Application::dbConfig()` returned
+because `class_exists()` is false for both. `Application`'s private config reader returned
 `[]` whenever no `Config` was bound — which is always, since nothing binds one —
 so `orm()` opened `:memory:` and every query answered. Neither errors. The
 symptom in both cases is a thing that is *not there*: a table migrated into a
