@@ -110,7 +110,7 @@ a page, and a layout.
 
 The trade is real and worth stating: **this app no longer demonstrates what the
 framework can do.** The auth module's own suite demonstrates authentication; the
-framework's 542 tests demonstrate components, routing, regions, sessions, CSRF
+framework's 549 tests demonstrate components, routing, regions, sessions, CSRF
 and the ORM. If you want a worked example of a feature end to end, read that
 package's tests rather than looking for it here.
 
@@ -300,6 +300,32 @@ that happened to have `APP_ENV=production` exported silently changed what a
 development machine served, and nothing on the page said so. Stripping first
 means a key `.env` does not mention falls through to the application's own
 default rather than inheriting from outside.
+
+The mechanism is `Application::loadEnvironment()`; `App` passes the key list.
+That split is deliberate — the framework cannot know that `LOG_LEVEL` is
+configuration and `NOT_A_REAL_KEY` is not.
+
+**Where the application is, and who says so.** `__ROOT_DIR__` is defined by the
+two entry points, and they are the only parties that know:
+
+```php
+defined('__ROOT_DIR__') || define('__ROOT_DIR__', dirname(__DIR__));
+App::loadEnvironment();
+```
+
+Both files need it. The console never loads `public/index.php` — `vendor/bin/empira`
+requires `bootstrap/app.php` — so a constant defined only in the front
+controller would leave `empira migrate` reading configuration from wherever the
+process happened to start.
+
+The `defined() ||` guard is not defensive tidiness. Both entry points can be
+reached twice in one process, and an unconditional `define()` warns on the
+second load and **is a fatal error in PHP 9**.
+
+`Application::loadEnvironment()` refuses rather than falling back to `getcwd()`
+when it has neither the constant nor an explicit path. The working directory is
+whatever the process manager or the operator started the process in, and a
+configuration file read from there is one the application did not write.
 
 Consequences worth knowing before you add a setting:
 

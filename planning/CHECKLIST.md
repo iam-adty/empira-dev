@@ -5,7 +5,7 @@
 > a bug.
 
 Framework: `iam-adty/empira-principle` · app: `iam-adty/empira-app`
-Current: **542 framework tests / 1208 assertions**, **53 auth tests / 102 assertions**, **14 frankenphp tests / 24 assertions**, **47 debugtools tests / 130 assertions**, **26 app-test tests / 56 assertions** (in the generated `app-test/`, not in `app/`).
+Current: **549 framework tests / 1217 assertions**, **53 auth tests / 102 assertions**, **14 frankenphp tests / 24 assertions**, **47 debugtools tests / 130 assertions**, **26 app-test tests / 56 assertions** (in the generated `app-test/`, not in `app/`).
 
 ---
 
@@ -1100,11 +1100,41 @@ docblock has always claimed and what was not true until now.
 
 **A missing import was silently worth nothing.** PHP records an attribute by
 name and resolves it only at `newInstance()`, so `#[LoginPage($page)]` written
-without the import became `Empira\Auth\Tests\LoginPage` — which does not
-exist — and `getAttributes(ModuleOption::class, IS_INSTANCEOF)` matched nothing
-without complaining. The module served its own page and nothing said why. Found
-by the join test, which is the second time in two days that a test written to
-close a seam found the seam was never closed.
+without the import became a name in the *test's own* namespace — which does not
+exist and never did — and `getAttributes(ModuleOption::class, IS_INSTANCEOF)`
+matched nothing without complaining. The module served its own page and nothing
+said why. Found by the join test, which is the second time in two days that a
+test written to close a seam found the seam was never closed.
+
+### 26. The entry points say where the application is — 2026-10-16
+
+- ~~`Application::loadEnvironment(array $keys, ?string $basePath)`~~
+- ~~`__ROOT_DIR__` defined by `public/index.php` and `bootstrap/app.php`~~
+- ~~`basePath()` prefers the constant over reflecting on `static::class`~~
+- ~~An unconditional `define()` is guarded — it is a fatal error in PHP 9~~
+
+**Both entry points need the constant, and it is worth being clear why.**
+The console never loads the front controller: `vendor/bin/empira` requires
+`bootstrap/app.php` and boots from that. A `__ROOT_DIR__` defined only in
+`public/index.php` would leave `empira migrate` reading configuration from
+wherever the process happened to start. Two entry points, two definitions, same
+name and value — the same reason there are two boot methods.
+
+**It refuses rather than guessing.** `loadEnvironment()` with neither a path nor
+the constant throws rather than falling back to `getcwd()`, which is whatever
+the process manager, the scheduler or the operator started the process in. A
+`.env` read from there is a configuration file the application did not write, and
+the failure is a secret that is not the secret.
+
+**PHP 9 found the guard for me.** An unconditional `define()` warns when the file
+is reached twice, and the scratch suite reaches `bootstrap/app.php` twice on
+every console test — `Bootstrap::boot()` does, and so does a test that boots it
+by hand. It is a warning today and a fatal error in PHP 9, which is the shape
+worth fixing before it is an outage rather than after.
+
+The subprocess test in `LoadEnvironmentTest` points the constant at a temporary
+directory rather than at this package. Writing a `.env` into `principle/` to
+satisfy a test would have been the bug, not the fix.
 
 ## Three things the standards cost, none of which was obvious
 

@@ -16,7 +16,6 @@ use Empira\Application\SqliteStorage;
 use Empira\Application\StderrLogger;
 use Empira\Auth\AuthModule;
 use Empira\Auth\LoginPage;
-use Empira\Config\Env;
 use Empira\DebugTools\DebugToolsModule;
 use Empira\Security\Csrf;
 use Empira\State\SessionState;
@@ -83,18 +82,17 @@ final class App extends Application
     }
 
     /**
-     * Copied from the skeleton verbatim, because `bootstrap/app.php` calls this
-     * and a copy that drifted would fail every test in the suite with a message
-     * about a missing method rather than about the drift. That is exactly what
-     * happened the first time this file was written.
+     * The skeleton's own keys, handed to the framework's method.
+     *
+     * The mechanism is inherited now, which is the point: it used to be copied
+     * here and drifted, and `bootstrap/app.php` — which comes from the clone,
+     * not from this overlay — calls it with no arguments.
+     *
+     * @param list<string> $keys further keys to strip before reading the file
      */
-    public static function loadEnvironment(string $basePath): void
+    public static function loadEnvironment(array $keys = [], ?string $basePath = null): void
     {
-        foreach (self::CONFIG_KEYS as $key) {
-            unset($_ENV[$key]);
-        }
-
-        $_ENV = array_merge($_ENV, Env::fromFile($basePath . '/.env'));
+        parent::loadEnvironment([...self::CONFIG_KEYS, ...$keys], $basePath);
     }
 
     public function __construct(?StateStore $state = null, ?Csrf $csrf = null)

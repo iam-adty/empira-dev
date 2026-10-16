@@ -468,7 +468,7 @@ final class AppTest extends TestCase
 
         // And the application's own value is what a fresh read produces.
         unset($_ENV['APP_SECRET']);
-        App::loadEnvironment(dirname(__DIR__));
+        App::loadEnvironment([], dirname(__DIR__));
 
         self::assertSame(self::$baseline['APP_SECRET'] ?? null, $_ENV['APP_SECRET'] ?? null);
     }
