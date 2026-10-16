@@ -5,7 +5,7 @@
 > a bug.
 
 Framework: `iam-adty/empira-principle` · app: `iam-adty/empira-app`
-Current: **511 framework tests / 1153 assertions**, **37 auth tests / 71 assertions**, **14 frankenphp tests / 24 assertions**, **45 debugtools tests / 125 assertions**, **26 app-test tests / 55 assertions** (in the generated `app-test/`, not in `app/`).
+Current: **521 framework tests / 1168 assertions**, **51 auth tests / 99 assertions**, **14 frankenphp tests / 24 assertions**, **45 debugtools tests / 125 assertions**, **26 app-test tests / 56 assertions** (in the generated `app-test/`, not in `app/`).
 
 ---
 
@@ -974,6 +974,53 @@ The exception split is PSR-11's own: "something went wrong" is `ContainerExcepti
 "there is nothing here" is `NotFound`, and `NotFound` extends the other so an
 application catching `ContainerException` keeps catching what it caught.
 
+### 23. A thin `App`, and modules named by class — 2026-10-16
+
+- ~~`AuthModule` builds its own guard when it was given none~~ — naming a module
+  by class produced one with no guards, no error, and a login form that reports
+  "wrong password" forever
+- ~~`Auth::attempt()` — one null for every failure, because distinguishing them
+  tells an attacker which half of a guess was right~~
+- ~~`ConfigurableModule` — a module says what options it accepts; core never
+  names a module type~~
+- ~~The module publishes `/login`, `/login` POST and `/logout`, with CSRF
+  attached to the POSTs by the module rather than by the application~~
+- ~~`App` is `final App extends Application` with `#[Modules]` and
+  `#[Overrides]` above it — 369 lines down to a constructor~~
+- ~~`Application` is no longer `final`~~
+- ~~`bootstrap/modules.php` deleted from the skeleton and from the harness~~
+
+**The module could not be named until it could build itself.** `array $guards = []`
+is a perfectly good constructor default, so the container built an `AuthModule`
+with nothing in it and said nothing. An application using the attribute would have
+installed authentication that authenticated nobody — the exact failure the module
+exists to prevent, and invisible in every log. Self-sufficiency is the
+prerequisite, which is why this shipped before the `App` rewrite rather than with
+it.
+
+**A package cannot extend an application class, so `login:` means the application
+supplies the page.** This is the one interpreted piece of the design and it is
+worth stating plainly: `login:` names a layout class the module points `GET
+/login` at, and the natural way to write it is one extending the app's own
+`SiteLayout`. "The module uses the app's layout" is not something the package can
+do — it ships a plain page as a floor and gets told about the real one.
+
+**Two of the things found here were silent, and that is the shape worth
+recording.** `ClassScanner` reported interfaces and traits as PSR-4 mismatches,
+because `class_exists()` is false for both. `Application::dbConfig()` returned
+`[]` whenever no `Config` was bound — which is always, since nothing binds one —
+so `orm()` opened `:memory:` and every query answered. Neither errors. The
+symptom in both cases is a thing that is *not there*: a table migrated into a
+real file, a file sitting exactly where PSR-4 said. A missing thing is much
+harder to notice than a broken one, and it is why the skeleton still needs a
+suite generated for it even though it ships none.
+
+**`orm($paths)` is now refused outright.** Rewriting `App` to drop its hand-built
+config array left `$this->orm([__DIR__, $entityPath])` behind, which passes the
+entity paths as the *configuration*. It shipped, booted and served — against a
+database with no tables in it. The scratch suite caught it; `principle` now turns
+it into a boot that stops.
+
 ## Three things the standards cost, none of which was obvious
 
 **`withHeader()` used to mutate under a PSR-shaped name.** PSR-7 requires every
@@ -1014,9 +1061,9 @@ been the cleaner design and the bigger break.
 
 **Verified:** third-party PSR-15 middleware naming no Empira class runs unadapted,
 including short-circuiting; a factory-built request satisfies the standard and
-keeps `path()`; `App-Test` rebuilds and passes at 26/55; a live page renders with
-the toolbar injected and both profiler endpoints answering. **511 framework
-tests / 1153 assertions**, and the suite was run three times rather than once —
+keeps `path()`; `App-Test` rebuilds and passes at 26/56; a live page renders with
+the toolbar injected and both profiler endpoints answering. **521 framework
+tests / 1168 assertions**, and the suite was run three times rather than once —
 immutability changes are exactly the shape that passes a single run while having
 changed the semantics.
 

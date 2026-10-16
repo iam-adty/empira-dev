@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Tests;
 
 use App\App;
+use App\App\Modules;
 use Empira\Auth\Auth;
 use Empira\Auth\AuthModule;
 use Empira\Auth\User;
@@ -13,6 +14,8 @@ use Empira\DebugTools\DebugToolsModule;
 use Empira\Http\Request;
 use Empira\Module;
 use PHPUnit\Framework\TestCase;
+use ReflectionAttribute;
+use ReflectionClass;
 
 /**
  * The skeleton, proven to be a working application.
@@ -291,40 +294,43 @@ final class AppTest extends TestCase
     }
 
     /**
-     * The registry file is the answer to "what is this application made of?",
-     * and this is what makes that true rather than aspirational.
+     * The `#[Modules]` attribute is the answer to "what is this application made
+     * of?", and this is what makes that true rather than aspirational.
      *
-     * It returns a *closure* and not a list, because a module is built from the
-     * container: the auth guard needs this application's session and entity
-     * manager, and neither exists before `Application::orm()` has run. So the
-     * registry is a recipe, `App::boot()` calls it when the container is ready,
-     * and a list built eagerly at the top of the file would fail.
+     * It names *classes* rather than instances, which is what lets the container
+     * build them: the auth guard needs this application's session and entity
+     * manager, and neither exists before `Application::orm()` has run. A list of
+     * instances built eagerly at the top of a registry file would fail for
+     * exactly that reason — which is why the attribute holds names and boot
+     * resolves them once the container is ready.
      *
-     * The two checks that matter: the file returns something callable, and what
-     * it returns is the module that boot installed. If someone moves the module
-     * back inline and leaves this file behind, the boot assertion still passes
-     * and this one does not — which is the whole reason the registry is the
-     * thing being tested rather than the framework.
+     * The two checks that matter: the attribute declares something, and what it
+     * declares is what boot installed. If someone moves the module back inline
+     * and leaves the attribute behind, the boot assertion still passes and this
+     * one does not — which is the whole reason the declaration is the thing being
+     * tested rather than the framework.
      */
-    public function testTheRegistryFileIsWhatDecidesWhichModulesExist(): void
+    public function testTheModulesAttributeIsWhatDecidesWhichModulesExist(): void
     {
-        $registry = require dirname(__DIR__) . '/bootstrap/modules.php';
+        $declared = (new ReflectionClass(App::class))
+            ->getAttributes(Modules::class, ReflectionAttribute::IS_INSTANCEOF)[0]
+            ->newInstance();
 
-        self::assertIsCallable($registry, 'the registry must return a closure, not a list');
+        // Strings, not instances: a name the container resolves is the whole
+        // point, since the auth guard needs a session and an entity manager
+        // that do not exist at the point an attribute is read. Asserting on
+        // instances here would assert the opposite of the design.
+        self::assertContainsOnly('string', $declared->modules);
 
-        $app = App::boot();
+        foreach ($declared->modules as $class) {
+            self::assertTrue(is_a($class, Module::class, true), "{$class} is not a module");
+        }
 
-        // Called with the booted application rather than a fresh one: the
-        // registry reads `$app->session()` and `$app->entities()`, so this is
-        // the same call `App::boot()` makes, and the modules it returns must be
-        // the ones already installed.
-        self::assertEquals(
-            array_map('get_class', $app->modules()),
-            array_map('get_class', $registry($app)),
-            'the registry and the booted application disagree about the modules'
+        self::assertSame(
+            $declared->modules,
+            array_map('get_class', App::boot()->modules()),
+            'the attribute and the booted application disagree about the modules'
         );
-
-        self::assertContainsOnlyInstancesOf(Module::class, $registry($app));
     }
 
     /**

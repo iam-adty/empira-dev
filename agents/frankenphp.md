@@ -40,8 +40,8 @@ or not a worker is present — that is what lets the same application run under 
 — and a change that made them conditional on the runtime would undo that.
 
 **Does not own the reference application.** `app/` installs neither this package
-nor a loop. Adding `FrankenPhpModule` to its `bootstrap/modules.php` is a change
-to the app, and an app decision.
+nor a loop. Adding `FrankenPhpModule` to the `#[Modules]` attribute on `App` is a
+change to the app, and an app decision.
 
 ## The refusal
 

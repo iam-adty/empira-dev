@@ -50,13 +50,13 @@ app/
 ├── composer.lock      committed: an application pins its build
 ├── migrations/        empty, on purpose — see the .gitkeep
 ├── bootstrap/app.php  the console entry `vendor/bin/empira` boots
-├── bootstrap/modules.php  what this application is made of
 ├── public/index.php   front controller, classic runtimes only
 └── src/
-    ├── App.php        all the wiring, in one readable method
+    ├── App.php        the application — two attributes and a constructor
+    ├── App/           the overridable pieces: secret, logger, storage
     ├── Console/       empty, on purpose — see the .gitkeep
     ├── Layouts/       SiteLayout — the document and its regions
-    └── Pages/         HomeLayout — the one page
+    └── Pages/         HomeLayout, LoginLayout
 ```
 
 ## The skeleton ships no tests
@@ -111,7 +111,7 @@ a page, and a layout.
 
 The trade is real and worth stating: **this app no longer demonstrates what the
 framework can do.** The auth module's own suite demonstrates authentication; the
-framework's 511 tests demonstrate components, routing, regions, sessions, CSRF
+framework's 521 tests demonstrate components, routing, regions, sessions, CSRF
 and the ORM. If you want a worked example of a feature end to end, read that
 package's tests rather than looking for it here.
 

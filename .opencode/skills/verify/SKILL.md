@@ -60,7 +60,7 @@ dev/tools/check-readme-installs        # every README's install snippet works as
 
 `check-baselines` is the exception: it **runs** the four library suites, because
 counting `public function test` methods is wrong — `principle` declares 474 and
-reports 511, because two are data providers. It needs `composer install` done in
+reports 521, because two are data providers. It needs `composer install` done in
 each package, and it skips `app-test` when the scratch application is not built.
 
 `check-links` is the one to reach for after editing documentation. It is strict
@@ -103,7 +103,7 @@ you do not need.
 cd principle && composer test
 ```
 
-`511 tests, 1153 assertions` is the current baseline. **If your change adds or
+`521 tests, 1168 assertions` is the current baseline. **If your change adds or
 removes tests, update that number in every document that quotes it** —
 `dev/agents/principle.md`, `dev/planning/CHECKLIST.md`, `principle/ARCHITECTURE.md`, `principle/docs/testing.md`.
 
@@ -129,11 +129,11 @@ separate package with its own gate, and it is the one that proves the module
 contract end to end.
 
 ```bash
-cd auth && composer test          # 37 tests, 71 assertions
+cd auth && composer test          # 51 tests, 99 assertions
 cd auth && composer validate      # must be clean
 cd app  && composer validate      # must be clean — app/ has no suite of its own
 cd debugtools && composer test    # 45 tests, 125 assertions
-dev/tools/app-test check          # 26 tests, 55 assertions — the generated app-test/
+dev/tools/app-test check          # 26 tests, 56 assertions — the generated app-test/
 ```
 
 A change to `principle/src/Security/` or to the module contract is not finished
