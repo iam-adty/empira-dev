@@ -52,8 +52,7 @@ app/
 ├── bootstrap/app.php  the console entry `vendor/bin/empira` boots
 ├── public/index.php   front controller, classic runtimes only
 └── src/
-    ├── App.php        the application — two attributes and a constructor
-    ├── App/           the overridable pieces: secret, logger, storage
+    ├── App.php        the application — three attributes and a constructor
     ├── Console/       empty, on purpose — see the .gitkeep
     ├── Layouts/       SiteLayout — the document and its regions
     └── Pages/         HomeLayout, LoginLayout
@@ -111,7 +110,7 @@ a page, and a layout.
 
 The trade is real and worth stating: **this app no longer demonstrates what the
 framework can do.** The auth module's own suite demonstrates authentication; the
-framework's 528 tests demonstrate components, routing, regions, sessions, CSRF
+framework's 542 tests demonstrate components, routing, regions, sessions, CSRF
 and the ORM. If you want a worked example of a feature end to end, read that
 package's tests rather than looking for it here.
 

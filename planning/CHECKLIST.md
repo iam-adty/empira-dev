@@ -5,7 +5,7 @@
 > a bug.
 
 Framework: `iam-adty/empira-principle` · app: `iam-adty/empira-app`
-Current: **528 framework tests / 1184 assertions**, **51 auth tests / 99 assertions**, **14 frankenphp tests / 24 assertions**, **47 debugtools tests / 130 assertions**, **26 app-test tests / 56 assertions** (in the generated `app-test/`, not in `app/`).
+Current: **542 framework tests / 1208 assertions**, **53 auth tests / 102 assertions**, **14 frankenphp tests / 24 assertions**, **47 debugtools tests / 130 assertions**, **26 app-test tests / 56 assertions** (in the generated `app-test/`, not in `app/`).
 
 ---
 
@@ -1073,6 +1073,38 @@ so without a comment explaining which half you are reading.
 `LoggerInterface`, and nothing in `principle/src` outside `StderrLogger.php`
 names a concrete implementation. The framework ships *a* working default rather
 than none, and an application with its own logger never touches Monolog.
+
+### 25. The application stopped repeating the framework — 2026-10-16
+
+- ~~`Empira\ModuleOption` — a module publishes its own option~~
+- ~~`Application` gained `attribute()`, `override()`, `basePath()`,
+  `publishDatabaseDefaults()` and `installModules()`~~
+- ~~`LoginPage` moved to `auth`, where it implements `ModuleOption`~~
+- ~~`app/src/App.php`: 288 lines to 178. The scratch application's: 205 to 130~~
+- ~~An attribute PHP cannot resolve is refused rather than ignored~~
+
+**The evidence for moving them was duplication, not taste.** All five private
+helpers existed identically in `app/src/App.php` and in the scratch
+application's own `App.php`, and had drifted twice: a missing
+`loadEnvironment()` that stopped the suite starting, and `orm()` handed entity
+paths in its configuration argument so the application opened `:memory:` and
+served every request into a database with no tables. A test written against
+either copy would have passed against both and proved nothing.
+
+**`resolveModules()` was the one that could not move as written.** It hardcoded
+`'login'` — auth's vocabulary, in the application's own file. Moving it to
+`Application` unchanged would have put that knowledge straight back into core,
+undoing the `LoginPage` move. Hence `ModuleOption`: the framework collects every
+attribute implementing it and never learns a name, which is what `Modules`'
+docblock has always claimed and what was not true until now.
+
+**A missing import was silently worth nothing.** PHP records an attribute by
+name and resolves it only at `newInstance()`, so `#[LoginPage($page)]` written
+without the import became `Empira\Auth\Tests\LoginPage` — which does not
+exist — and `getAttributes(ModuleOption::class, IS_INSTANCEOF)` matched nothing
+without complaining. The module served its own page and nothing said why. Found
+by the join test, which is the second time in two days that a test written to
+close a seam found the seam was never closed.
 
 ## Three things the standards cost, none of which was obvious
 

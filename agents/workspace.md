@@ -114,10 +114,10 @@ narrower contract — `Security\Identity` and `Security\Guard` exist because
 
 ```bash
 # the framework — host PHP, SQLite, no container
-cd principle && composer test          # 528 tests
+cd principle && composer test          # 542 tests
 
 # the auth module — SQLite
-cd auth && composer test               # 51 tests
+cd auth && composer test               # 53 tests
 
 # worker mode — SQLite
 cd frankenphp && composer test         # 14 tests
@@ -219,7 +219,7 @@ credentials seeded on first boot. Each is a thing to *remove*, and removal is
 slower than never having it.
 
 **The trade is real:** the app no longer demonstrates what the framework can do.
-Authentication is demonstrated by `auth/`'s 51 tests, components and routing by
+Authentication is demonstrated by `auth/`'s 53 tests, components and routing by
 the framework's 521. If you are looking for a worked example of a feature, look
 there rather than in the app.
 

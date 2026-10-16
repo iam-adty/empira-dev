@@ -1,6 +1,6 @@
 # AGENTS.md
 
-> **Status: describes shipped code.** Current behaviour, verified against `51 tests, 99 assertions`.
+> **Status: describes shipped code.** Current behaviour, verified against `53 tests, 102 assertions`.
 
 Guidance for AI agents and new contributors working on the Empira auth module.
 
