@@ -5,7 +5,7 @@
 > a bug.
 
 Framework: `iam-adty/empira-principle` · app: `iam-adty/empira-app`
-Current: **521 framework tests / 1168 assertions**, **51 auth tests / 99 assertions**, **14 frankenphp tests / 24 assertions**, **45 debugtools tests / 125 assertions**, **26 app-test tests / 56 assertions** (in the generated `app-test/`, not in `app/`).
+Current: **521 framework tests / 1168 assertions**, **51 auth tests / 99 assertions**, **14 frankenphp tests / 24 assertions**, **47 debugtools tests / 130 assertions**, **26 app-test tests / 56 assertions** (in the generated `app-test/`, not in `app/`).
 
 ---
 
@@ -901,6 +901,11 @@ handler, not from `{id}`; `latest` and `/previous/5` → `200`. Baselines moved 
   DebugBar equivalent, so the buffer earns its place again.
 - ~~`debug:clear --hours=<n>`~~ — prunes by age. Closes the uncapped-growth risk.
 - ~~45 debugtools tests / 125 assertions~~
+- ~~The toolbar's own assets resolve~~ — `getJavascriptRenderer(ASSETS)` passes
+  `$baseUrl`, not `$assetHandlerUrl`, so every injected page asked for
+  `/__debugbar/assets/dist/debugbar.min.css` and got a 404. Found from a browser
+  the same day §21 shipped, and 45 green tests did not catch it. Now **47 tests /
+  130 assertions**.
 
 **This inverts the module's central promise, so the boundary is drawn narrowly.**
 `shouldInject()` requires no `HX-Request`, no vetoing content type, and a
@@ -940,12 +945,24 @@ FrankenPHP worker mode was left out of scope by decision. Nothing in the package
 references it, and `DebugBar` is built per request, so there is no shared
 instance to leak — dropping it cost a test, not a design.
 
-**The contract is the response body, not the rendering.** Each injection rule is
-asserted on what a response contains — an `HX-Request` swap, a non-HTML type, a
-document with no `</body>` — and each was confirmed by deleting it and watching
-the suite go red. Whether DebugBar's own JavaScript then draws a toolbar is
-upstream's to have tested: this package's half of that boundary is the injection
-decision, not the paint.
+**The contract is the response body, not the rendering — and for a while the
+suite was asserting less than that.** Reported from a browser: the toolbar's
+stylesheet and script both 404'd. `getJavascriptRenderer(ASSETS)` passes
+`$baseUrl`, not `$assetHandlerUrl`, so `renderHead()` fell back to joining the
+base URL with `dist/debugbar.min.css` — a path the endpoint does not serve,
+because it serves by `?type=css`.
+
+Both halves were already tested. One asserted the word "debugbar" appeared in the
+body, which a broken URL satisfies; the other built `?type=js` **by hand** and
+proved it answered. Neither took the URL out of the page and asked for it. The
+seam between the two was the one untested thing, and "the response body is the
+contract" was true of *what the body contained* rather than of *where it
+pointed*.
+
+Corrected rather than defended: the new test extracts every `href` and `src` and
+requests each back through the application. Whether DebugBar's own JavaScript
+then draws is still upstream's to have tested — that half of the boundary was
+right all along.
 
 ### 22. PSR-7, PSR-11, PSR-15 and PSR-17 — 2026-10-16
 

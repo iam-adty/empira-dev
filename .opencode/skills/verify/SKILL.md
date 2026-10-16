@@ -132,7 +132,7 @@ contract end to end.
 cd auth && composer test          # 51 tests, 99 assertions
 cd auth && composer validate      # must be clean
 cd app  && composer validate      # must be clean — app/ has no suite of its own
-cd debugtools && composer test    # 45 tests, 125 assertions
+cd debugtools && composer test    # 47 tests, 130 assertions
 dev/tools/app-test check          # 26 tests, 56 assertions — the generated app-test/
 ```
 

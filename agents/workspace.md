@@ -123,7 +123,7 @@ cd auth && composer test               # 51 tests
 cd frankenphp && composer test         # 14 tests
 
 # request profiling — SQLite
-cd debugtools && composer test         # 45 tests
+cd debugtools && composer test         # 47 tests
 
 # the application — SQLite, and not in app/:
 dev/tools/app-test check               # 26 tests, in the generated app-test/

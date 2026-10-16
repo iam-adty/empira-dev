@@ -1,7 +1,7 @@
 # AGENTS.md
 
-> **Status: describes shipped code.** Current behaviour, verified against `45
-> tests, 125 assertions`.
+> **Status: describes shipped code.** Current behaviour, verified against `47
+> tests, 130 assertions`.
 
 Guidance for `debugtools/` — `iam-adty/empira-debug-tools`, request profiling for
 an Empira application, backed by [PHP DebugBar](https://php-debugbar.com/).
