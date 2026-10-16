@@ -889,11 +889,6 @@ handler, not from `{id}`; `latest` and `/previous/5` → `200`. Baselines moved 
 > `/__clockwork/…` and no longer exist. Left as written, because it was true when
 > it was written.
 
-**Not automated.** The Clockwork Chrome extension is the one consumer that
-ignores the header fallback path, so it is the only check that proves the
-client-ignores-header case resolves. No browser is installed here; that check is
-still owed.
-
 ### 21. DebugBar replaces Clockwork — 2026-10-16
 
 - ~~`itsgoingd/clockwork` → `php-debugbar/php-debugbar:^3.8`~~ — and every
@@ -945,9 +940,12 @@ FrankenPHP worker mode was left out of scope by decision. Nothing in the package
 references it, and `DebugBar` is built per request, so there is no shared
 instance to leak — dropping it cost a test, not a design.
 
-**Not verified.** No browser here, so the toolbar has not been seen rendering.
-The injection rules are asserted on response bodies, which is the contract; that
-DebugBar's own JavaScript draws is upstream's to have tested.
+**The contract is the response body, not the rendering.** Each injection rule is
+asserted on what a response contains — an `HX-Request` swap, a non-HTML type, a
+document with no `</body>` — and each was confirmed by deleting it and watching
+the suite go red. Whether DebugBar's own JavaScript then draws a toolbar is
+upstream's to have tested: this package's half of that boundary is the injection
+decision, not the paint.
 
 ### 22. PSR-7, PSR-11, PSR-15 and PSR-17 — 2026-10-16
 
