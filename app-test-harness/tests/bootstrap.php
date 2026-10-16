@@ -18,7 +18,7 @@ declare(strict_types=1);
  * Loading it twice is harmless — `loadEnvironment()` is idempotent for the same
  * file — but PHPUnit runs this once per process, which is once.
  *
- * The root is passed rather than left to `__ROOT_DIR__`, because the constant is
+ * The root is passed rather than left to `EMPIRA_APP_ROOT`, because the constant is
  * defined by the two *entry points* and this is neither of them: PHPUnit loads
  * this file directly and never goes near `public/index.php` or
  * `bootstrap/app.php`. That is exactly the case the framework refuses to guess

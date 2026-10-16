@@ -305,11 +305,11 @@ The mechanism is `Application::loadEnvironment()`; `App` passes the key list.
 That split is deliberate — the framework cannot know that `LOG_LEVEL` is
 configuration and `NOT_A_REAL_KEY` is not.
 
-**Where the application is, and who says so.** `__ROOT_DIR__` is defined by the
+**Where the application is, and who says so.** `EMPIRA_APP_ROOT` is defined by the
 two entry points, and they are the only parties that know:
 
 ```php
-defined('__ROOT_DIR__') || define('__ROOT_DIR__', dirname(__DIR__));
+defined('EMPIRA_APP_ROOT') || define('EMPIRA_APP_ROOT', dirname(__DIR__));
 App::loadEnvironment();
 ```
 

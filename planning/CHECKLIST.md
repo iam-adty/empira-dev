@@ -1109,13 +1109,13 @@ test written to close a seam found the seam was never closed.
 ### 26. The entry points say where the application is — 2026-10-16
 
 - ~~`Application::loadEnvironment(array $keys, ?string $basePath)`~~
-- ~~`__ROOT_DIR__` defined by `public/index.php` and `bootstrap/app.php`~~
+- ~~`EMPIRA_APP_ROOT` defined by `public/index.php` and `bootstrap/app.php`~~
 - ~~`basePath()` prefers the constant over reflecting on `static::class`~~
 - ~~An unconditional `define()` is guarded — it is a fatal error in PHP 9~~
 
 **Both entry points need the constant, and it is worth being clear why.**
 The console never loads the front controller: `vendor/bin/empira` requires
-`bootstrap/app.php` and boots from that. A `__ROOT_DIR__` defined only in
+`bootstrap/app.php` and boots from that. An `EMPIRA_APP_ROOT` defined only in
 `public/index.php` would leave `empira migrate` reading configuration from
 wherever the process happened to start. Two entry points, two definitions, same
 name and value — the same reason there are two boot methods.
