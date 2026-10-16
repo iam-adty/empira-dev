@@ -5,7 +5,7 @@
 > a bug.
 
 Framework: `iam-adty/empira-principle` · app: `iam-adty/empira-app`
-Current: **490 framework tests / 1103 assertions**, **37 auth tests / 71 assertions**, **14 frankenphp tests / 24 assertions**, **39 debugtools tests / 123 assertions**, **26 app-test tests / 54 assertions** (in the generated `app-test/`, not in `app/`).
+Current: **490 framework tests / 1103 assertions**, **37 auth tests / 71 assertions**, **14 frankenphp tests / 24 assertions**, **45 debugtools tests / 125 assertions**, **26 app-test tests / 55 assertions** (in the generated `app-test/`, not in `app/`).
 
 ---
 
@@ -882,12 +882,72 @@ a rationale for the opposite decision.
 requested one; `/__clockwork/app/assets/index-159S-Gz-.js` → `200
 application/javascript`, 522 KB; `/__clockwork/app/foo.js` → `404` from the asset
 handler, not from `{id}`; `latest` and `/previous/5` → `200`. Baselines moved to
-**39 debugtools tests / 123 assertions** and **26 app-test / 54**.
+**39 tests at 123 assertions** and **26 app-test / 54**.
+
+> Superseded a day later by [§21](#21-debugbar-replaces-clockwork--2026-10-16),
+> which replaces the profiler entirely. The paths verified above are
+> `/__clockwork/…` and no longer exist. Left as written, because it was true when
+> it was written.
 
 **Not automated.** The Clockwork Chrome extension is the one consumer that
 ignores the header fallback path, so it is the only check that proves the
 client-ignores-header case resolves. No browser is installed here; that check is
 still owed.
+
+### 21. DebugBar replaces Clockwork — 2026-10-16
+
+- ~~`itsgoingd/clockwork` → `php-debugbar/php-debugbar:^3.8`~~ — and every
+  Clockwork-shaped thing went with it: the `/__clockwork` routes, the
+  `X-Clockwork-*` headers, `Server-Timing`, `EmpiraDataSource`,
+  `ClockworkMiddleware`, `DebugController::API`, `DebugController::PATH`.
+- ~~The toolbar is injected into full HTML documents~~ — which **reverses** the
+  package's documented "injects nothing into your pages".
+- ~~`Marks` kept, for a new reason~~ — `update()` and `Span::duration()` have no
+  DebugBar equivalent, so the buffer earns its place again.
+- ~~`debug:clear --hours=<n>`~~ — prunes by age. Closes the uncapped-growth risk.
+- ~~45 debugtools tests / 125 assertions~~
+
+**This inverts the module's central promise, so the boundary is drawn narrowly.**
+`shouldInject()` requires no `HX-Request`, no vetoing content type, and a
+`</body>` tag. The htmx rule is the load-bearing one: a toolbar appended to a
+swap would land inside the element being replaced and duplicate on the next.
+Each of the three was verified by deleting it and watching the suite go red.
+
+**`Response::html()` sets no `Content-Type`.** Found while writing the gate:
+the framework only sets one where something must be declared, so `text/html`
+cannot be *required* — on the commonest HTML response there is no header at all.
+The content type is only allowed to veto; `</body>` is what establishes a whole
+page.
+
+**`StandardDebugBar` is deliberately not used.** It registers
+`RequestDataCollector`, which harvests `$_GET`, `$_POST` and `$_COOKIE` from the
+superglobals **unconditionally**. Adopting it as-is would have written session
+cookies and password fields to disk on every profiled request — precisely the
+credential store the `collectPayloads`/`collectCookies` flags existed to prevent,
+reintroduced by the upgrade. Collectors are assembled by hand instead, and a test
+asserts the `request` key is absent and that neither secret is in the profile.
+
+**A real bug, found only because the suite was run ten times.** `FileStorage`
+orders stored requests by request id, and an id begins with a **millisecond**
+timestamp — "lexical sort = time sort" for requests seconds apart. Two requests
+inside one millisecond share that prefix and are ordered by the random bytes after
+it, so `debug:show` could report the *previous* request. Two requests in a test
+are microseconds apart, so this made the suite fail about one run in three. Both
+the command and the test helpers now pick the maximum `__meta['utime']`.
+
+**The mutation testing nearly lied twice.** A `perl -0pi` pattern that matched
+nothing leaves a green suite behind, and reading only the "OK" line would have
+counted it as a pass. The mutations were redone with a replacement counter
+printed, and every one confirmed applied before its result was believed. An early
+attempt at the same thing using `sed` also silently matched zero times.
+
+FrankenPHP worker mode was left out of scope by decision. Nothing in the package
+references it, and `DebugBar` is built per request, so there is no shared
+instance to leak — dropping it cost a test, not a design.
+
+**Not verified.** No browser here, so the toolbar has not been seen rendering.
+The injection rules are asserted on response bodies, which is the contract; that
+DebugBar's own JavaScript draws is upstream's to have tested.
 
 ---
 

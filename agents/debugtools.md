@@ -1,17 +1,17 @@
 # AGENTS.md
 
-> **Status: describes shipped code.** Current behaviour, verified against `39
-> tests, 123 assertions`.
+> **Status: describes shipped code.** Current behaviour, verified against `45
+> tests, 125 assertions`.
 
 Guidance for `debugtools/` — `iam-adty/empira-debug-tools`, request profiling for
-an Empira application, backed by [Clockwork](https://github.com/itsgoingd/clockwork).
+an Empira application, backed by [PHP DebugBar](https://php-debugbar.com/).
 
 Read [`workspace.md`](workspace.md) first; it describes how the five repositories
 fit together. This file covers only what is specific to this one.
 
 ## What this is
 
-A module. It records requests and serves an interface for looking at them, and
+A module. It records requests, injects a toolbar into full HTML responses, and
 the framework has no idea it exists — no classes of its are named in
 `principle/src`, no configuration of its is required, and an application that
 installs it and switches it off behaves exactly as it did before.
@@ -27,15 +27,18 @@ final class DebugToolsModule implements Module, CommandProvider
 framework checks those names against its own, so a collision here fails with a
 sensible message rather than whichever command happened to win.
 
-Four classes make up the developer-facing surface, and they are separate on
-purpose:
+## Classes
 
 | Class | Is | Because |
 |---|---|---|
 | `Debug` | the API a developer calls | no `Application` accessor exists to resolve one from |
-| `Marks` | the buffer | the Clockwork request object does not exist while a handler runs |
+| `Marks` | the buffer | DebugBar's collector cannot update an open measure or read one back |
 | `Span` | the handle | timing what a closure cannot wrap |
-| `Profiler` | the owner | one Clockwork, one storage directory, one set of ids |
+| `Profiler` | the owner | one DebugBar, one storage directory, one set of ids |
+| `EmpiraCollector` | what the request was | DebugBar reads the superglobals, not an Empira `Request` |
+| `EmpiraDebugBar` | the metadata override | as above, and it is a one-method subclass |
+| `DebugBarController` | the two endpoints | the toolbar is an iframe built from what these return |
+| `DebugBarMiddleware` | recording and injection | wraps the whole request in both directions |
 
 ## Commands
 
@@ -62,12 +65,12 @@ use Empira\DebugTools\DebugToolsModule;
 $app->module(new DebugToolsModule(__DIR__ . '/..'));
 ```
 
-The base path decides where recorded requests are written: `$basePath/storage/clockwork`.
+The base path decides where recorded requests are written: `$basePath/storage/debugbar`.
 It defaults to the working directory, which is usually right.
 
 ```php
 new DebugToolsModule(__DIR__ . '/..', ['enabled' => true]);    // force on
-new DebugToolsModule(__DIR__ . '/..', ['storage_path' => '/tmp/cw']);
+new DebugToolsModule(__DIR__ . '/..', ['storage_path' => '/tmp/dbg']);
 ```
 
 ## Conventions
@@ -83,25 +86,73 @@ new DebugToolsModule(__DIR__ . '/..', ['storage_path' => '/tmp/cw']);
 - Explanation belongs in docblocks, not inline comments.
 - Tests: `final class XTest extends TestCase`, names that read as behaviour,
   `assertSame` over `assertEquals`. Every test drives `$app->handle()` rather than
-  calling the data source directly — the interesting failures in a module like
-  this are in the wiring, and none of those are visible from the inside.
+  calling the collector directly — the interesting failures in a module like this
+  are in the wiring, and none of those are visible from the inside.
 - No emojis.
 
 ## Known traps
 
-**`Clockwork::resolveRequest()` writes into whatever request object is already
-there.** It does not create one. A single shared `Clockwork` instance — which is
-what `$app->container()->get(Profiler::class)` gives — will otherwise store the
-second request of a process under the first request's id, carrying its duration
-and accumulating its timeline events. Under a worker that is one profile growing
-for the life of the process, presented as though each page load were its own.
-`Profiler::record()` installs a fresh `Clockwork\Request\Request` before resolving
-for exactly this reason, and that line is load-bearing.
+**`FileStorage::find()` orders by request id, and an id is a millisecond
+timestamp.** The generator's own comment says "lexical sort = time sort", and for
+requests seconds apart that is true. Two requests handled in the same millisecond
+share that prefix and are ordered by the random bytes after it, which have
+nothing to do with which happened first. `debug:show` reporting the *previous*
+request is what that looks like, and two requests in a test are microseconds
+apart, so it is not hypothetical. `ShowCommand` and the test helpers pick the
+maximum `__meta['utime']` instead — `microtime(true)`, and a resolution nothing
+in this path can exceed. **Do not "simplify" that back to `find()[0]`.**
 
-**`addDataSource()` appends without checking for duplicates.** Calling it per
-request leaves the list one entry longer each time — invisible for a single
-request, unbounded under a worker. The source is registered once, in the
-`Profiler` constructor, and reused.
+**`FileStorage::find()` throws when its directory does not exist.** It hands the
+directory to `FilesystemIterator`. Nobody has debugged anything yet is exactly
+when `debug:show`, the toolbar and `debug:clear` all ask, so
+a private setup step on `Profiler` establishes the directory before handing the
+storage out. The `.gitignore` written alongside it is the easy part to miss:
+without one every recorded request is a file the next `git add` commits.
+
+**DebugBar's `collectMetaData()` reads `$_SERVER`.** It knows nothing about
+Empira, and in a test the `Request` is constructed directly and never touches a
+superglobal — so the metadata would describe the test runner.
+`EmpiraDebugBar` overrides the one method and merges the empira values over the
+parent's. Everything else it does is what is wanted.
+
+**`StandardDebugBar` registers `RequestDataCollector`, and it must not be used
+as-is.** That collector harvests `$_GET`, `$_POST` and `$_COOKIE` from the
+superglobals **unconditionally**, on every profiled request — a session cookie
+and a password field, written to disk and served back over HTTP by a tool that is
+on by default in development. The collectors are therefore assembled by hand in
+`Profiler`: `PhpInfoCollector`, `MessagesCollector`, `TimeDataCollector`,
+`MemoryCollector`, `ExceptionsCollector`, and `EmpiraCollector`.
+`StorageHistoryTest::testTheRequestCollectorsAreNotDebugBarsOwn()` asserts the
+`request` key is absent and that a password and a cookie are nowhere in the
+serialised profile.
+
+**Upstream handlers echo and set headers.** `OpenHandler::handle()` and
+`AssetHandler::handle()` both default to `$echo = true, $sendHeader = true`,
+because they were written to be the last thing in a front controller that has
+given up control of the response. Empira has not. Both are called with both
+`false`, and the returned string is wrapped in a `Response` — otherwise two
+writers race for one response.
+
+**Handler arguments are autowired, so they must be resolvable.** A controller
+method taking `array $query` fails with *"Cannot resolve $query of a callable"* —
+there is no binding for it. `Empira\Http\Request` is bound as an instance per
+request, so take `Request` and read `$request->query`.
+
+**`MessagesCollector` names the level `label`, not `level`.** `addMessage()`
+stores `'label' => $level`. A test asserting on `level` finds `null` and reads as
+a logging failure.
+
+**`TimeDataCollector::addMeasure()` defaults a missing end to the start.**
+`Marks` leaves a span open until someone closes it, so an unfinished span arrives
+as a zero-duration point. That is deliberate — stretching it to the end of the
+request would claim work took the whole request when the truth is that it was
+never measured to a finish.
+
+**Repeated-measure merging is off by default. Keep it off.** `addMeasure()`
+collapses same-label measures with identical params into one entry with a
+`values[]` array when `mergeRepeatedMeasures()` has been called. Three
+`Debug::mark('row')` calls would then become one measure and two payloads would
+go nowhere, which is the opposite of what a mark in a loop is for.
 
 **`$_ENV` only — never `getenv()`.** This module read `getenv()` as a second
 source for `APP_ENV`, and it was the only `getenv()` in the workspace. The
@@ -111,163 +162,64 @@ value the application never saw. A profiler deciding whether to write every
 request to disk should decide on the application's answer, not a second one
 gathered behind its back.
 
-**There is one data source, and it is shared.** `EmpiraDataSource` looks
-per-request, since it holds the request in hand, and binding a fresh one per
-request in the container is the obvious thing to do — but the middleware writes
-to it while Clockwork reads from the one registered on the instance. Two objects
-means nothing is recorded at all. It is cleared and re-primed at both ends of
-every request instead.
-
-**Clockwork's file storage `fopen()`s its `index` unsuppressed, on read.** It
-creates that file inside a *protected* method it calls only when storing. So
-`latest()` on a fresh installation answers with PHP warnings and a false rather
-than with an empty list — which is what `debug:show` and the interface ask,
-precisely when nobody has debugged anything yet. `Profiler::storage()`
-establishes the directory, the empty index and the `.gitignore` before handing it
-out. The `.gitignore` is the easy one to miss: without it every recorded
-request is a file the next `git add` commits.
-
-**`storage()` answers with an object, or `false`.** Not an array, and not null.
-`latest()` and `find()` return a `Clockwork\Request\Request`, which is **not**
-`JsonSerializable` — `toArray()` is the shape to read, and handing the object
-straight to `json_encode` produces something different from what Clockwork's own
-interface expects.
-
-**Deleting every file in the storage directory breaks it.** The `index` is
-append-only and is opened on every read; removing it alongside the request files
-leaves a storage that answers every later question with warnings and a false.
-`debug:clear` truncates the index and removes only `*.json` and `*.json.gz`.
-
-**A route catch-all will happily swallow the API.** `/app/{path:.*}` matches
-everything after it, so the API routes are registered *before* it. Empira
-matches in registration order.
+**There is one collector, and it is shared.** `EmpiraCollector` looks per-request,
+since it holds the request in hand, and binding a fresh one per request in the
+container is the obvious thing to do — but the middleware writes to it while
+DebugBar reads the one registered on the instance. Two objects means nothing is
+recorded at all. It is cleared and re-primed at both ends of every request
+instead.
 
 **Exceptions thrown by handlers arrive at this middleware, and leave unchanged.**
 The application catches them *outside* the pipeline. Recording the failure and
 re-throwing is the whole contract: a profiler that skips exactly the requests you
-wanted to debug is worse than no profiler. No headers are added on that path —
-there is no response to add them to yet, and the application's error renderer
-runs outside this pipeline and does not know this module exists.
-
-**`Clockwork\Request\Request::$time` is set when the object is constructed, and
-that is not when the request began.** `Profiler::record()` builds the object after
-the handler has already run, so leaving `responseDuration` to Clockwork's
-`getResponseDuration()` measures the recording rather than the request — a
-five-millisecond handler is reported as taking the time it takes to serialise
-itself. `EmpiraDataSource` sets `responseDuration` explicitly, from the clock
-`begin()` started. It is **already in milliseconds**; converting again reports a
-thousandfold. `tests/DebugToolsTest.php` sleeps 2ms in the handler on purpose: an
-instant closure reports 0.0ms whether this is right or wrong, so a test without
-the sleep passes against the bug.
-
-**The bar's numbers travel in the page, not in a cookie.** `Response::cookie()`
-*replaces* the `Set-Cookie` header rather than appending, so a bar setting a
-cookie from the outermost middleware would silently overwrite whatever cookie the
-application set while dispatching — and only on pages being debugged, which is
-the worst time to discover it. A `script type="application/json"` island costs one
-element and cannot collide.
-
-**An absent `Content-Type` means HTML, here.** The framework sets none: both a
-layout-rendered page and a handler returning a string come back with the header
-unset. Requiring `text/html` would mean the bar never appeared on the pages it
-exists for. It is safe only because the injection separately requires a `</body>`
-— JSON has none — so the two checks together are stricter than either.
+wanted to debug is worse than no profiler. Nothing is injected on that path —
+there is no response to inject into, and the application's error renderer runs
+outside this pipeline and does not know this module exists.
 
 **`Response::headers()` is checked with `strcasecmp`, not an array key.** Header
 names arrive as they were written, and `Content-Type` and `content-type` are the
 same header.
 
-## The header contract
+## Injection, and why it is bounded
 
-This package's whole integration with a Clockwork client is three headers, and
-`X-Clockwork-Path` is the one that is easy to get wrong:
+This module rewrites response bodies. That is a change of contract from the
+package's previous profiler, which was headless and left responses byte-identical,
+so the boundary is drawn narrowly and every part of it is load-bearing.
 
-```php
-->withHeader('X-Clockwork-Path', DebugController::API)   // /_clockwork/api
-```
+the injection check in `DebugBarMiddleware` requires all of:
 
-A client — the Chrome extension, or Clockwork's own bundle — parses
-`X-Clockwork-Id`, `X-Clockwork-Path` and `X-Clockwork-Version` for
-`{id, path, version}` and then requests **`{path}/{id}`**. Clockwork's own value
-for that path is `/__clockwork/`, and its server answers `/__clockwork/{id}`.
+- **no `HX-Request` header** — a swap is answered with a fragment, and a toolbar
+  appended to one would land inside the element being replaced, survive the swap
+  and be duplicated by the next. This is the single reason the "injects nothing"
+  claim could be dropped without consequence.
+- **no vetoing content type** — a JSON body would no longer parse.
+- **a `</body>` tag** — absent from a partial, and absent from a streamed file
+  because `Response::body()` is `''` for those.
 
-So the header is the **API base**, not the prefix the interface is mounted at.
-Sending `DebugController::PATH` points every client at `/_clockwork/{id}`, a
-route that does not exist, and the application looks perfectly healthy while
-every client 404s. It shipped that way once.
+**An absent `Content-Type` means HTML here, deliberately.** `Response::html()`
+sets no content type at all, so the check cannot *require* `text/html`; the
+content type is only allowed to veto, and `</body>` is what establishes that a
+response is a whole page. Requiring `text/html` would mean the bar never appeared
+on the commonest HTML response there is.
 
-`StorageHistoryTest::testAClientCanGetItsDataFromTheHeadersAlone()` performs the
-journey from the headers alone. It is the test that would catch a regression, and
-it is the reason to not "simplify" that header back to the prefix.
+Each of those three was checked by removing it and watching the suite go red. A
+test that passes whether or not a rule exists is not a test of the rule — see
+`DebugToolsTest::testNothingIsInjectedIntoAnHtmxSwap()` and its two siblings.
 
-## Clockwork's timeline has three ways to lose your data
-
-Found by reading `Clockwork/Request/Timeline/Event.php`, not by testing. Each
-one fails silently — an event that arrives with no payload and a duration of zero
-looks exactly like an event that had nothing to report.
-
-**`Event` reads exactly five keys** — `name`, `start`, `end`, `color`, `data` —
-and nothing else. A payload passed at the top level is none of those five and is
-**discarded**. Everything this module attaches to an event is nested under
-`'data' =>`. There is no way to have it quietly not work.
-
-**`Timeline::event()` finds-or-creates by name.** `if ($event = $this->find($name)) return $event;`
-Three `Debug::mark('row')` calls produce **one** event, and the other two
-payloads go nowhere. This module's own lifecycle events use `event()` because
-their names are unique per request; everything a developer marks uses
-`create()`.
-
-**`Event::finalize()` clamps to a window it is given:**
+## The two endpoints
 
 ```php
-if ($this->start < $start) $this->start = $start;
-if ($this->end > $end) $this->end = $end;
+GET /__debugbar/assets?type=js|css
+GET /__debugbar/openhandler?op=find|get|clear
 ```
 
-`Clockwork::resolveRequest()` passes `$request->time`, and that object is built
-in `Profiler::record()` — *after* the handler. So anything the application did
-during the request starts before that and would be dragged forward onto the
-instant recording began. `EmpiraDataSource::resolve()` overwrites
-`$request->time` with the request's real start, which is the fix.
-`DebugHelperTest::testMarksSurviveTheTimelineFinalizeClamp()` marks twice with a
-2ms gap and asserts the gap survives, because a clamp to a single instant would
-leave them indistinguishable.
+Both `csrf: false`. Neither is registered when the profiler is off.
+`BootContractTest` in the harness asserts both patterns exactly — a prefix
+substring would pass for either route.
 
-## Storage answers with objects, `false`, and arrays
-
-`Clockwork\Request\Request` is **not** `JsonSerializable`. `toArray()` is the
-shape to serve, and all three of these have to be handled or a client gets a
-subtly wrong document:
-
-| Call | Returns |
-|---|---|
-| `latest()`, `find($id)` | one `Request`, or `false` when there is none |
-| `all()`, `previous()`, `next()` | an **array** of `Request` |
-
-Passing an array straight to `json_encode` encodes each object's public
-properties — which omits every *computed* field, so a paged client would see no
-duration and no query counts for records that have them. `DebugController`
-maps both shapes, and
-`StorageHistoryTest::testPagingEndpointsReturnTheSameShapeAsASingleRequest()`
-compares the field lists so the two cannot drift apart again.
-
-`find()` on an unknown id is a 404 here, not `null`: a 200 with a null body lets
-a client cache "no such request" as though it were data.
-
-## Nothing is injected into a response
-
-This package ships no JavaScript, rewrites no response bodies, and serves no
-HTML. There was an in-page toolbar and a wrapper page; both are gone, and
-`DebugToolsTest::testAPageIsLeftByteForByteAlone()` asserts a page comes back
-exactly as the handler wrote it.
-
-That was a deliberate change, not an omission — upstream takes the same position,
-and its toolbar is a separate npm or CDN component. The cost is worth recording
-anyway: an early wrapper page embedded CSS and JS in a PHP heredoc using `{{`
-and `}}`, which PHP does **not** escape. They went out literally, the CSS was
-invalid, and the JS was a syntax error — a 300×150 iframe and a client with no
-`metadataPath`, from one wrong brace. **PHP heredoc interpolates `$`, `{$…}`
-and `${…}`. Braces are literal.**
+`op=get` for an unknown id answers **200 with `[]`**. That is DebugBar's wire
+format and the toolbar's JavaScript is written against it, so it is left alone
+rather than "corrected" to a 404 that would break the client being served.
 
 ## `Debug` is a static on purpose
 
@@ -287,8 +239,12 @@ would be easy to "optimise" into a production incident.
 - `composer test` passes, and the suite *finishes* — `tools/test` checks for the
   summary line, because an `exit` anywhere truncates the run and still reports
   success.
+- **Run the suite more than once.** This package has a history of ordering that is
+  correct at one-millisecond resolution and wrong in the gaps; a suite that passes
+  twice out of three runs is not green.
 - Every new behaviour is covered by a test that fails without the change. Verify
-  by mutating the source and watching it go red.
+  by mutating the source and watching it go red — and check the mutation actually
+  applied, because a pattern that matched nothing leaves a green suite behind.
 - No new public API in `principle`, and no `empira-debug-tools` class named in
   `principle/src`.
 - `dev/tools/module-contract` and `dev/tools/check-links` pass.

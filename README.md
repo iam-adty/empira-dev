@@ -116,7 +116,7 @@ degradation is only safe if it is known to be one.
 cd principle && composer test    # 490 tests, SQLite on the host
 cd auth      && composer test    # 37 tests, SQLite
 cd frankenphp && composer test   # 14 tests, SQLite
-cd debugtools && composer test   # 39 tests, SQLite
+cd debugtools && composer test   # 45 tests, SQLite
 dev/tools/app-test check         # 26 tests, in the generated app-test/
 ```
 

@@ -106,19 +106,22 @@ final class BootContractTest extends TestCase
             App::boot()->routes()->all(),
         );
 
-        // The data endpoint, which is the whole of what this module publishes. It
-        // shares the `/__clockwork` prefix with the asset route and has no `/api`
-        // segment, so the exact pattern is what has to be checked — a substring
-        // assertion would pass for either route. The module serves no page —
-        // nothing is injected into a response and no JavaScript ships — so that
-        // endpoint is all there is, and it is what has to be missing when off.
+        // The two endpoints the toolbar talks to, and the whole of what this module
+        // publishes over HTTP. It serves no page of its own — the toolbar is an
+        // iframe built from the assets route — so these are all there is, and
+        // they are what has to be missing when the profiler is off.
+        //
+        // Both patterns are checked exactly. A prefix substring would pass for
+        // either route, and the previous profiler had a `{id}` route that shared
+        // one, which is exactly the confusion this guards against.
         self::withoutProfiler(function () use ($patterns): void {
-            self::assertNotContains('/__clockwork', $patterns());
+            self::assertNotContains('/__debugbar/assets', $patterns());
+            self::assertNotContains('/__debugbar/openhandler', $patterns());
         });
 
         self::withProfiler(function () use ($patterns): void {
-            self::assertContains('/__clockwork', $patterns());
-            self::assertContains('/__clockwork/{id:[0-9-]+|latest}', $patterns());
+            self::assertContains('/__debugbar/assets', $patterns());
+            self::assertContains('/__debugbar/openhandler', $patterns());
         });
     }
 
